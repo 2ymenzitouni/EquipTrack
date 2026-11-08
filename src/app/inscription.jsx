@@ -55,6 +55,45 @@ const MASTER_PROGRAMS = [
   'Mastère Professionnel : Smart Green Technologies',
 ];
 
+const ENGINEERING_SPECIALTIES = [
+  {
+    code: 'GEC',
+    name: 'Génie Électronique et Communication',
+    years: [
+      { year: 1, className: '1GEC' },
+      { year: 2, className: '2GEC' },
+      { year: 3, className: '3GEC', options: ['SE', 'SEI', 'SC'] },
+    ],
+  },
+  {
+    code: 'GII',
+    name: 'Génie Informatique Industrielle',
+    years: [
+      { year: 1, className: '1GII' },
+      { year: 2, className: '2GII' },
+      { year: 3, className: '3GII', options: ['SII', 'CRI', 'SSE'] },
+    ],
+  },
+  {
+    code: 'GT',
+    name: 'Génie des Télécommunications',
+    years: [
+      { year: 1, className: '1GT' },
+      { year: 2, className: '2GT' },
+      { year: 3, className: '3GT', options: ['RIC', 'TST', 'CS', 'SAT'] },
+    ],
+  },
+  {
+    code: 'IDSD',
+    name: 'Ingénierie des Données et Systèmes Décisionnels',
+    years: [
+      { year: 1, className: '1IDSD' },
+      { year: 2, className: '2IDSD' },
+      { year: 3, className: '3IDSD', options: ['ID', 'SD'] },
+    ],
+  },
+];
+
 export default function InscriptionScreen() {
   const router = useRouter();
   const { colors, addStudent, showToast, triggerHapticFeedback } = useEquipTrack();
@@ -66,12 +105,17 @@ export default function InscriptionScreen() {
   const [sectionYear, setSectionYear] = useState(null);
   const [specializationCode, setSpecializationCode] = useState('');
   const [masterProgram, setMasterProgram] = useState('');
+  const [engineeringSpecialtyCode, setEngineeringSpecialtyCode] = useState('');
+  const [engineeringYear, setEngineeringYear] = useState(null);
+  const [engineeringOption, setEngineeringOption] = useState('');
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
   const [specializationModalOpen, setSpecializationModalOpen] = useState(false);
+  const [engineeringYearModalOpen, setEngineeringYearModalOpen] = useState(false);
+  const [engineeringOptionModalOpen, setEngineeringOptionModalOpen] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const hasScannedRef = useRef(false);
   const availableSpecializations = LICENCE_SPECIALIZATIONS[sectionYear] || [];
@@ -82,11 +126,29 @@ export default function InscriptionScreen() {
     ({ code }) => code === specializationCode
   );
   const isLicence = classSection === 'Licence';
+  const isEngineering = classSection === "Cycle d'ingénieurs";
+  const selectedEngineeringSpecialty = ENGINEERING_SPECIALTIES.find(
+    ({ code }) => code === engineeringSpecialtyCode
+  );
+  const selectedEngineeringYear = selectedEngineeringSpecialty?.years.find(
+    ({ year }) => year === engineeringYear
+  );
   const canSelectSection =
-    isLicence || classSection === 'Mastère';
+    isLicence || classSection === 'Mastère' || isEngineering;
   const sectionOptions = isLicence
     ? LICENCE_YEARS.map(({ year, label }) => ({ value: year, label }))
-    : MASTER_PROGRAMS.map((program) => ({ value: program, label: program }));
+    : isEngineering
+      ? ENGINEERING_SPECIALTIES.map(({ code, name }) => ({
+          value: code,
+          label: name,
+        }))
+      : MASTER_PROGRAMS.map((program) => ({ value: program, label: program }));
+  const availableOptionCodes = isEngineering
+    ? selectedEngineeringYear?.options || []
+    : availableSpecializations.map(({ code }) => code);
+  const selectedOptionName = isEngineering
+    ? engineeringOption
+    : selectedSpecialization?.name;
 
   // Radar wave pulsing animation
   const pulseAnim = useState(new Animated.Value(1))[0];
@@ -189,6 +251,22 @@ export default function InscriptionScreen() {
       showToast('Veuillez sélectionner une section de Mastère.');
       return;
     }
+    if (isEngineering && !selectedEngineeringSpecialty) {
+      showToast('Veuillez sélectionner une spécialité.');
+      return;
+    }
+    if (isEngineering && !selectedEngineeringYear) {
+      showToast('Veuillez sélectionner une année.');
+      return;
+    }
+    if (
+      isEngineering &&
+      engineeringYear === 3 &&
+      !engineeringOption
+    ) {
+      showToast('Veuillez sélectionner une option.');
+      return;
+    }
     if (!scannedTagId) {
       showToast('Veuillez scanner un code QR avant de continuer.');
       return;
@@ -209,6 +287,15 @@ export default function InscriptionScreen() {
               .join(' - ')
           : classSection === 'Mastère'
             ? `${classSection} - ${masterProgram}`
+            : isEngineering
+              ? [
+                  'Cycle Ingénieur',
+                  selectedEngineeringSpecialty?.name,
+                  selectedEngineeringYear?.className,
+                  engineeringOption,
+                ]
+                  .filter(Boolean)
+                  .join(' - ')
             : classSection,
       phone: phone.trim() || '+33 6 00 00 00 00',
       tagId: scannedTagId,
@@ -410,9 +497,14 @@ export default function InscriptionScreen() {
                     setSectionYear(null);
                     setSpecializationCode('');
                     setMasterProgram('');
+                    setEngineeringSpecialtyCode('');
+                    setEngineeringYear(null);
+                    setEngineeringOption('');
                     setClassModalOpen(false);
                     setSectionModalOpen(false);
                     setSpecializationModalOpen(false);
+                    setEngineeringYearModalOpen(false);
+                    setEngineeringOptionModalOpen(false);
                   }}>
                   <Text
                     style={[
@@ -475,16 +567,19 @@ export default function InscriptionScreen() {
                 styles.selectText,
                 {
                   color:
-                    sectionYear || masterProgram
+                    sectionYear || masterProgram || engineeringSpecialtyCode
                       ? colors.onSurface
                       : colors.outline,
                 },
               ]}
               numberOfLines={1}>
-              {classSection === 'Licence'
+              {isLicence
                 ? selectedYearLabel || 'Sélectionner une section'
                 : classSection === 'Mastère'
                   ? masterProgram || 'Sélectionner une section'
+                  : isEngineering
+                    ? selectedEngineeringSpecialty?.name ||
+                      'Sélectionner une spécialité'
                   : classSection
                     ? 'Options à définir'
                     : 'Sélectionnez une formation'}
@@ -508,7 +603,9 @@ export default function InscriptionScreen() {
               {sectionOptions.map(({ value, label }) => {
                 const isSelected = isLicence
                   ? sectionYear === value
-                  : masterProgram === value;
+                  : isEngineering
+                    ? engineeringSpecialtyCode === value
+                    : masterProgram === value;
 
                 return (
                   <TouchableOpacity
@@ -523,11 +620,17 @@ export default function InscriptionScreen() {
                       if (isLicence) {
                         setSectionYear(value);
                         setSpecializationCode('');
+                      } else if (isEngineering) {
+                        setEngineeringSpecialtyCode(value);
+                        setEngineeringYear(null);
+                        setEngineeringOption('');
                       } else {
                         setMasterProgram(value);
                       }
                       setSectionModalOpen(false);
                       setSpecializationModalOpen(false);
+                      setEngineeringYearModalOpen(false);
+                      setEngineeringOptionModalOpen(false);
                     }}>
                     <Text
                       style={[
@@ -555,7 +658,105 @@ export default function InscriptionScreen() {
           )}
         </View>
 
-        {sectionYear > 1 && (
+        {isEngineering && selectedEngineeringSpecialty && (
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
+              Année / Classe <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: colors.inputBackground,
+                  borderColor: colors.inputBorder,
+                },
+              ]}
+              onPress={() =>
+                setEngineeringYearModalOpen(!engineeringYearModalOpen)
+              }
+              activeOpacity={0.7}>
+              <MaterialIcons
+                name="school"
+                size={18}
+                color={colors.outline}
+                style={styles.inputIcon}
+              />
+              <Text
+                style={[
+                  styles.selectText,
+                  {
+                    color: selectedEngineeringYear
+                      ? colors.onSurface
+                      : colors.outline,
+                  },
+                ]}
+                numberOfLines={1}>
+                {selectedEngineeringYear
+                  ? `Année ${selectedEngineeringYear.year} - ${selectedEngineeringYear.className}`
+                  : 'Sélectionner une année'}
+              </Text>
+              <MaterialIcons
+                name={engineeringYearModalOpen ? 'expand-less' : 'expand-more'}
+                size={22}
+                color={colors.outline}
+              />
+            </TouchableOpacity>
+
+            {engineeringYearModalOpen && (
+              <View
+                style={[
+                  styles.dropdownMenu,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}>
+                {selectedEngineeringSpecialty.years.map((yearOption) => {
+                  const isSelected = engineeringYear === yearOption.year;
+                  return (
+                    <TouchableOpacity
+                      key={yearOption.year}
+                      style={[
+                        styles.dropdownItem,
+                        isSelected && {
+                          backgroundColor: colors.surfaceContainerLow,
+                        },
+                      ]}
+                      onPress={() => {
+                        setEngineeringYear(yearOption.year);
+                        setEngineeringOption('');
+                        setEngineeringYearModalOpen(false);
+                        setEngineeringOptionModalOpen(false);
+                      }}>
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          {
+                            color: isSelected
+                              ? colors.primary
+                              : colors.onSurface,
+                            fontWeight: isSelected ? '700' : '400',
+                          },
+                        ]}>
+                        {`Année ${yearOption.year} - ${yearOption.className}`}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={colors.primary}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
+        {(sectionYear > 1 ||
+          (isEngineering && selectedEngineeringYear?.options?.length > 0)) && (
           <View style={styles.inputGroup}>
             <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
               Option <Text style={{ color: colors.error }}>*</Text>
@@ -568,9 +769,13 @@ export default function InscriptionScreen() {
                   borderColor: colors.inputBorder,
                 },
               ]}
-              onPress={() =>
-                setSpecializationModalOpen(!specializationModalOpen)
-              }
+              onPress={() => {
+                if (isEngineering) {
+                  setEngineeringOptionModalOpen(!engineeringOptionModalOpen);
+                } else {
+                  setSpecializationModalOpen(!specializationModalOpen);
+                }
+              }}
               activeOpacity={0.7}>
               <MaterialIcons
                 name="category"
@@ -582,22 +787,30 @@ export default function InscriptionScreen() {
                 style={[
                   styles.selectText,
                   {
-                    color: selectedSpecialization
+                    color: selectedOptionName
                       ? colors.onSurface
                       : colors.outline,
                   },
                 ]}
                 numberOfLines={1}>
-                {selectedSpecialization?.name || 'Sélectionner une option'}
+                {selectedOptionName || 'Sélectionner une option'}
               </Text>
               <MaterialIcons
-                name={specializationModalOpen ? 'expand-less' : 'expand-more'}
+                name={
+                  (isEngineering
+                    ? engineeringOptionModalOpen
+                    : specializationModalOpen)
+                    ? 'expand-less'
+                    : 'expand-more'
+                }
                 size={22}
                 color={colors.outline}
               />
             </TouchableOpacity>
 
-            {specializationModalOpen && (
+            {(isEngineering
+              ? engineeringOptionModalOpen
+              : specializationModalOpen) && (
               <View
                 style={[
                   styles.dropdownMenu,
@@ -606,34 +819,45 @@ export default function InscriptionScreen() {
                     borderColor: colors.cardBorder,
                   },
                 ]}>
-                {availableSpecializations.map((item) => (
+                {availableOptionCodes.map((optionCode) => {
+                  const item = isEngineering
+                    ? { code: optionCode, name: optionCode }
+                    : availableSpecializations.find(
+                        ({ code }) => code === optionCode
+                      );
+                  const isSelected = isEngineering
+                    ? engineeringOption === optionCode
+                    : specializationCode === optionCode;
+
+                  return (
                   <TouchableOpacity
-                    key={item.code}
+                    key={optionCode}
                     style={[
                       styles.dropdownItem,
-                      item.code === specializationCode && {
+                      isSelected && {
                         backgroundColor: colors.surfaceContainerLow,
                       },
                     ]}
                     onPress={() => {
-                      setSpecializationCode(item.code);
-                      setSpecializationModalOpen(false);
+                      if (isEngineering) {
+                        setEngineeringOption(optionCode);
+                        setEngineeringOptionModalOpen(false);
+                      } else {
+                        setSpecializationCode(optionCode);
+                        setSpecializationModalOpen(false);
+                      }
                     }}>
                     <Text
                       style={[
                         styles.dropdownItemText,
                         {
-                          color:
-                            item.code === specializationCode
-                              ? colors.primary
-                              : colors.onSurface,
-                          fontWeight:
-                            item.code === specializationCode ? '700' : '400',
+                          color: isSelected ? colors.primary : colors.onSurface,
+                          fontWeight: isSelected ? '700' : '400',
                         },
                       ]}>
-                      {item.name}
+                      {item?.name}
                     </Text>
-                    {item.code === specializationCode && (
+                      {isSelected && (
                       <Ionicons
                         name="checkmark-circle"
                         size={18}
@@ -641,7 +865,8 @@ export default function InscriptionScreen() {
                       />
                     )}
                   </TouchableOpacity>
-                ))}
+                  );
+                })}
               </View>
             )}
           </View>
