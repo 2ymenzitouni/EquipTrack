@@ -17,13 +17,33 @@ import { useEquipTrack } from '@/context/EquipTrackContext';
 import { Spacing, Radius } from '@/constants/theme';
 
 const CLASS_OPTIONS = [
-  'Terminale S2 - Sciences & Technologies',
-  'Première A - Littéraire & Arts',
-  '1ère ES1 - Sciences Économiques',
-  'Seconde 4 - Tronc Commun',
-  '3ème B - Collège Général',
-  'BTS SIO 1ère Année',
+  'Licence',
+  'Mastère',
+  "Cycle d'ingénieurs",
 ];
+
+const LICENCE_YEARS = [
+  { year: 1, label: '1ère année - Tronc commun' },
+  { year: 2, label: '2ème année' },
+  { year: 3, label: '3ème année' },
+];
+
+const LICENCE_SPECIALIZATIONS = {
+  2: [
+    {
+      code: 'CYBERSECURITY_TE',
+      name: 'CyberSecurity et Technologies Émergentes',
+    },
+    { code: 'SYSTEMES_IOT', name: 'Systèmes IoT' },
+  ],
+  3: [
+    {
+      code: 'CYBERSECURITY_TE',
+      name: 'CyberSecurity et Technologies Émergentes',
+    },
+    { code: 'SYSTEMES_IOT', name: 'Systèmes IoT' },
+  ],
+};
 
 export default function InscriptionScreen() {
   const router = useRouter();
@@ -32,13 +52,24 @@ export default function InscriptionScreen() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [equipment, setEquipment] = useState('');
-  const [classSection, setClassSection] = useState(CLASS_OPTIONS[0]);
+  const [classSection, setClassSection] = useState('');
+  const [sectionYear, setSectionYear] = useState(null);
+  const [specializationCode, setSpecializationCode] = useState('');
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
+  const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  const [specializationModalOpen, setSpecializationModalOpen] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const hasScannedRef = useRef(false);
+  const availableSpecializations = LICENCE_SPECIALIZATIONS[sectionYear] || [];
+  const selectedYearLabel = LICENCE_YEARS.find(
+    ({ year }) => year === sectionYear
+  )?.label;
+  const selectedSpecialization = availableSpecializations.find(
+    ({ code }) => code === specializationCode
+  );
 
   // Radar wave pulsing animation
   const pulseAnim = useState(new Animated.Value(1))[0];
@@ -126,7 +157,15 @@ export default function InscriptionScreen() {
       return;
     }
     if (!classSection.trim()) {
-      showToast('Veuillez sélectionner une classe.');
+      showToast('Veuillez sélectionner une formation.');
+      return;
+    }
+    if (classSection === 'Licence' && !sectionYear) {
+      showToast('Veuillez sélectionner une section.');
+      return;
+    }
+    if (classSection === 'Licence' && sectionYear > 1 && !specializationCode) {
+      showToast('Veuillez sélectionner une option.');
       return;
     }
     if (!scannedTagId) {
@@ -138,7 +177,16 @@ export default function InscriptionScreen() {
       fullName: fullName.trim(),
       email: email.trim() || `${fullName.toLowerCase().replace(/\s+/g, '.')}@ecole.fr`,
       equipment: equipment.trim() || 'Tablette Connectée',
-      classSection: classSection.split(' - ')[0] || classSection,
+      classSection:
+        classSection === 'Licence'
+          ? [
+              'Licence LTIC',
+              selectedYearLabel,
+              selectedSpecialization?.name,
+            ]
+              .filter(Boolean)
+              .join(' - ')
+          : classSection,
       phone: phone.trim() || '+33 6 00 00 00 00',
       tagId: scannedTagId,
       status: 'present',
@@ -279,7 +327,7 @@ export default function InscriptionScreen() {
           </View>
         </View>
 
-        {/* Input: Classe & Section */}
+        {/* Input: Formation */}
         <View style={styles.inputGroup}>
           <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
             Classe & Section <Text style={{ color: colors.error }}>*</Text>
@@ -306,7 +354,7 @@ export default function InscriptionScreen() {
                 { color: classSection ? colors.onSurface : colors.outline },
               ]}
               numberOfLines={1}>
-              {classSection || 'Sélectionner une classe'}
+              {classSection || 'Sélectionner une formation'}
             </Text>
             <MaterialIcons
               name={classModalOpen ? 'expand-less' : 'expand-more'}
@@ -315,7 +363,7 @@ export default function InscriptionScreen() {
             />
           </TouchableOpacity>
 
-          {/* Inline Class Picker Dropdown */}
+          {/* Inline formation picker dropdown */}
           {classModalOpen && (
             <View
               style={[
@@ -336,7 +384,11 @@ export default function InscriptionScreen() {
                   ]}
                   onPress={() => {
                     setClassSection(item);
+                    setSectionYear(null);
+                    setSpecializationCode('');
                     setClassModalOpen(false);
+                    setSectionModalOpen(false);
+                    setSpecializationModalOpen(false);
                   }}>
                   <Text
                     style={[
@@ -363,6 +415,198 @@ export default function InscriptionScreen() {
             </View>
           )}
         </View>
+
+        {/* Input: Section */}
+        <View style={styles.inputGroup}>
+          <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
+            Section
+            {classSection === 'Licence' && (
+              <Text style={{ color: colors.error }}> *</Text>
+            )}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.inputContainer,
+              {
+                backgroundColor: colors.inputBackground,
+                borderColor: colors.inputBorder,
+                opacity: classSection === 'Licence' ? 1 : 0.6,
+              },
+            ]}
+            onPress={() => {
+              if (classSection === 'Licence') {
+                setSectionModalOpen(!sectionModalOpen);
+              }
+            }}
+            activeOpacity={classSection === 'Licence' ? 0.7 : 1}
+            accessibilityState={{ disabled: classSection !== 'Licence' }}>
+            <MaterialIcons
+              name="school"
+              size={18}
+              color={colors.outline}
+              style={styles.inputIcon}
+            />
+            <Text
+              style={[
+                styles.selectText,
+                { color: sectionYear ? colors.onSurface : colors.outline },
+              ]}
+              numberOfLines={1}>
+              {selectedYearLabel ||
+                (classSection === 'Licence'
+                  ? 'Sélectionner une section'
+                  : classSection
+                    ? 'Options à définir'
+                    : 'Sélectionnez une formation')}
+            </Text>
+            <MaterialIcons
+              name={sectionModalOpen ? 'expand-less' : 'expand-more'}
+              size={22}
+              color={colors.outline}
+            />
+          </TouchableOpacity>
+
+          {sectionModalOpen && classSection === 'Licence' && (
+            <View
+              style={[
+                styles.dropdownMenu,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.cardBorder,
+                },
+              ]}>
+              {LICENCE_YEARS.map(({ year, label }) => (
+                <TouchableOpacity
+                  key={year}
+                  style={[
+                    styles.dropdownItem,
+                    year === sectionYear && {
+                      backgroundColor: colors.surfaceContainerLow,
+                    },
+                  ]}
+                  onPress={() => {
+                    setSectionYear(year);
+                    setSpecializationCode('');
+                    setSectionModalOpen(false);
+                    setSpecializationModalOpen(false);
+                  }}>
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      {
+                        color:
+                          year === sectionYear
+                            ? colors.primary
+                            : colors.onSurface,
+                        fontWeight: year === sectionYear ? '700' : '400',
+                      },
+                    ]}>
+                    {label}
+                  </Text>
+                  {year === sectionYear && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={18}
+                      color={colors.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
+        {sectionYear > 1 && (
+          <View style={styles.inputGroup}>
+            <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
+              Option <Text style={{ color: colors.error }}>*</Text>
+            </Text>
+            <TouchableOpacity
+              style={[
+                styles.inputContainer,
+                {
+                  backgroundColor: colors.inputBackground,
+                  borderColor: colors.inputBorder,
+                },
+              ]}
+              onPress={() =>
+                setSpecializationModalOpen(!specializationModalOpen)
+              }
+              activeOpacity={0.7}>
+              <MaterialIcons
+                name="category"
+                size={18}
+                color={colors.outline}
+                style={styles.inputIcon}
+              />
+              <Text
+                style={[
+                  styles.selectText,
+                  {
+                    color: selectedSpecialization
+                      ? colors.onSurface
+                      : colors.outline,
+                  },
+                ]}
+                numberOfLines={1}>
+                {selectedSpecialization?.name || 'Sélectionner une option'}
+              </Text>
+              <MaterialIcons
+                name={specializationModalOpen ? 'expand-less' : 'expand-more'}
+                size={22}
+                color={colors.outline}
+              />
+            </TouchableOpacity>
+
+            {specializationModalOpen && (
+              <View
+                style={[
+                  styles.dropdownMenu,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}>
+                {availableSpecializations.map((item) => (
+                  <TouchableOpacity
+                    key={item.code}
+                    style={[
+                      styles.dropdownItem,
+                      item.code === specializationCode && {
+                        backgroundColor: colors.surfaceContainerLow,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSpecializationCode(item.code);
+                      setSpecializationModalOpen(false);
+                    }}>
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        {
+                          color:
+                            item.code === specializationCode
+                              ? colors.primary
+                              : colors.onSurface,
+                          fontWeight:
+                            item.code === specializationCode ? '700' : '400',
+                        },
+                      ]}>
+                      {item.name}
+                    </Text>
+                    {item.code === specializationCode && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Input: Numéro de téléphone */}
         <View style={styles.inputGroup}>
