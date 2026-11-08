@@ -128,6 +128,12 @@ npm run web
 
 You can also open the app with the Expo Go mobile app by scanning the QR code from the terminal output.
 
+<h2 style="color:#0ea5e9;">🗄️ Supabase registration setup</h2>
+
+Before using the registration form, run [`supabase/registration.sql`](./supabase/registration.sql) in the Supabase SQL Editor. It creates the atomic student-and-loan registration function and the anonymous insert policies required by the app.
+
+The app uses a Supabase publishable key in `src/constants/supabase.js`; publishable keys are intended for client apps and are not service-role secrets. The SQL policies allow unauthenticated clients to insert student and loan records, so use this setup only if public registration writes are acceptable for your project.
+
 <h2 style="color:#f43f5e;">✅ Linting</h2>
 
 To run the project linter:

@@ -12,8 +12,10 @@ import {
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Crypto from 'expo-crypto';
 import * as Clipboard from 'expo-clipboard';
 import { useEquipTrack } from '@/context/EquipTrackContext';
+import { supabase } from '@/constants/supabase';
 import { Spacing, Radius } from '@/constants/theme';
 
 const CLASS_OPTIONS = [
@@ -111,6 +113,7 @@ export default function InscriptionScreen() {
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
   const [specializationModalOpen, setSpecializationModalOpen] = useState(false);
@@ -230,7 +233,8 @@ export default function InscriptionScreen() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSaving) return;
     if (!fullName.trim()) {
       showToast('Veuillez renseigner le nom complet.');
       return;
@@ -272,42 +276,111 @@ export default function InscriptionScreen() {
       return;
     }
 
-    addStudent({
-      fullName: fullName.trim(),
-      email: email.trim() || `${fullName.toLowerCase().replace(/\s+/g, '.')}@ecole.fr`,
-      equipment: equipment.trim() || 'Tablette Connectée',
-      classSection:
-        isLicence
+    const trimmedName = fullName.trim();
+    const studentEmail =
+      email.trim() || `${trimmedName.toLowerCase().replace(/\s+/g, '.')}@ecole.fr`;
+    const equipmentName = equipment.trim() || 'Tablette Connectée';
+    const phoneNumber = phone.trim() || '+33 6 00 00 00 00';
+    const classData = isLicence
+      ? {
+          program: "Licence en Technologies de l'Information et de la Communication",
+          section: 'LTIC',
+          specialty: selectedSpecialization?.name || null,
+          year: sectionYear,
+          class: null,
+          option: selectedSpecialization
+            ? {
+                code: selectedSpecialization.code,
+                name: selectedSpecialization.name,
+              }
+            : null,
+        }
+      : classSection === 'Mastère'
+        ? {
+            program: 'Mastère',
+            section: masterProgram,
+            specialty: null,
+            year: null,
+            class: null,
+            option: null,
+          }
+        : isEngineering
+          ? {
+              program: 'Cycle Ingénieur',
+              section: selectedEngineeringSpecialty.code,
+              specialty: selectedEngineeringSpecialty.name,
+              year: engineeringYear,
+              class: selectedEngineeringYear.className,
+              option: engineeringOption || null,
+            }
+          : {
+              program: classSection,
+              section: null,
+              specialty: null,
+              year: null,
+              class: null,
+              option: null,
+            };
+    const classLabel = isLicence
+      ? [
+          'Licence LTIC',
+          selectedYearLabel,
+          selectedSpecialization?.name,
+        ]
+          .filter(Boolean)
+          .join(' - ')
+      : classSection === 'Mastère'
+        ? `${classSection} - ${masterProgram}`
+        : isEngineering
           ? [
-              'Licence LTIC',
-              selectedYearLabel,
-              selectedSpecialization?.name,
+              'Cycle Ingénieur',
+              selectedEngineeringSpecialty.name,
+              selectedEngineeringYear.className,
+              engineeringOption,
             ]
               .filter(Boolean)
               .join(' - ')
-          : classSection === 'Mastère'
-            ? `${classSection} - ${masterProgram}`
-            : isEngineering
-              ? [
-                  'Cycle Ingénieur',
-                  selectedEngineeringSpecialty?.name,
-                  selectedEngineeringYear?.className,
-                  engineeringOption,
-                ]
-                  .filter(Boolean)
-                  .join(' - ')
-            : classSection,
-      phone: phone.trim() || '+33 6 00 00 00 00',
-      tagId: scannedTagId,
-      status: 'present',
-    });
+          : classSection;
 
-    // Reset and route to directory
-    setFullName('');
-    setEmail('');
-    setEquipment('');
-    setPhone('');
-    router.push('/');
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.rpc('register_student_with_loan', {
+        p_student_id: Crypto.randomUUID(),
+        p_type: 'student',
+        p_phone_number: phoneNumber,
+        p_full_name: trimmedName,
+        p_email: studentEmail,
+        p_class: classData,
+        p_equipment_id: Crypto.randomUUID(),
+        p_equipment_name: equipmentName,
+        p_nfc_uid: scannedTagId,
+        p_status: 'borrowed',
+      });
+
+      if (error) throw error;
+
+      addStudent({
+        fullName: trimmedName,
+        email: studentEmail,
+        equipment: equipmentName,
+        classSection: classLabel,
+        phone: phoneNumber,
+        tagId: scannedTagId,
+        status: 'present',
+      });
+
+      setFullName('');
+      setEmail('');
+      setEquipment('');
+      setPhone('');
+      showToast('Inscription enregistrée dans Supabase.');
+      router.push('/');
+    } catch (error) {
+      console.error('Erreur lors de l’enregistrement Supabase :', error);
+      showToast('Échec de l’enregistrement. Vérifiez la configuration Supabase.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -1068,12 +1141,18 @@ export default function InscriptionScreen() {
       <TouchableOpacity
         style={[
           styles.submitButton,
-          { backgroundColor: colors.primaryContainer },
+          {
+            backgroundColor: colors.primaryContainer,
+            opacity: isSaving ? 0.7 : 1,
+          },
         ]}
         onPress={handleSubmit}
+        disabled={isSaving}
         activeOpacity={0.85}>
         <MaterialIcons name="how-to-reg" size={24} color="#ffffff" />
-        <Text style={styles.submitButtonText}>Enregistrer l’utilisateur</Text>
+        <Text style={styles.submitButtonText}>
+          {isSaving ? 'Enregistrement...' : 'Enregistrer l’utilisateur'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
