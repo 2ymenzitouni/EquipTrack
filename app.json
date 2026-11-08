@@ -26,6 +26,12 @@
     "plugins": [
       "expo-router",
       [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "Autoriser EquipTrack à lire les tags NFC à proximité."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",

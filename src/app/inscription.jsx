@@ -34,7 +34,7 @@ export default function InscriptionScreen() {
   const [equipment, setEquipment] = useState('');
   const [classSection, setClassSection] = useState(CLASS_OPTIONS[0]);
   const [phone, setPhone] = useState('');
-  const [scannedTagId, setScannedTagId] = useState('NFC-88F4-902B-11A');
+  const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
 
@@ -60,27 +60,61 @@ export default function InscriptionScreen() {
     return () => pulseLoop.stop();
   }, [pulseAnim]);
 
-  const handleScanTag = () => {
+  const handleScanTag = async () => {
     triggerHapticFeedback();
-    setIsScanning(true);
+    if (Platform.OS === 'web') {
+      showToast('La lecture NFC nécessite un téléphone compatible NFC.');
+      return;
+    }
 
-    setTimeout(() => {
-      const hexCodes = [
-        'NFC-88F4-902B-11A',
-        'NFC-44B1-28CD-90C',
-        'RFID-330A-88EF-44',
-        'NFC-19E0-74AA-52F',
-        'RFID-992B-01CD-77',
-      ];
-      const randomTag = hexCodes[Math.floor(Math.random() * hexCodes.length)];
-      setScannedTagId(randomTag);
-      setIsScanning(false);
-      showToast(`Badge ${randomTag} synchronisé !`);
+    setIsScanning(true);
+    showToast('Rapprochez le tag NFC du téléphone pour le scanner.');
+
+    let requestAttempted = false;
+    try {
+      const { default: NfcManager, NfcTech } = await import('react-native-nfc-manager');
+      const isSupported = await NfcManager.isSupported();
+      if (!isSupported) {
+        showToast('Ce téléphone ne prend pas en charge la lecture NFC.');
+        return;
+      }
+
+      await NfcManager.start();
+      requestAttempted = true;
+      await NfcManager.requestTechnology(NfcTech.NfcA);
+      const tag = await NfcManager.getTag({ readNdef: false });
+      const tagId = tag?.id?.toUpperCase();
+
+      if (!tagId) {
+        showToast('Identifiant introuvable. Rapprochez le tag et réessayez.');
+        return;
+      }
+
+      setScannedTagId(tagId);
+      showToast(`Tag ${tagId} lu avec succès.`);
       triggerHapticFeedback();
-    }, 850);
+    } catch (error) {
+      console.error('Erreur lors de la lecture du tag NFC :', error);
+      showToast('Lecture impossible. Vérifiez le NFC et rapprochez le tag.');
+    } finally {
+      try {
+        if (requestAttempted) {
+          await NfcManager.cancelTechnologyRequest();
+        }
+      } catch (error) {
+        console.error('Erreur lors de la fermeture de la session NFC :', error);
+      } finally {
+        setIsScanning(false);
+      }
+    }
   };
 
   const handleCopyTag = async () => {
+    if (!scannedTagId) {
+      showToast('Aucun identifiant de tag à copier.');
+      return;
+    }
+
     triggerHapticFeedback();
     try {
       if (Platform.OS === 'web') {
@@ -101,6 +135,10 @@ export default function InscriptionScreen() {
     }
     if (!classSection.trim()) {
       showToast('Veuillez sélectionner une classe.');
+      return;
+    }
+    if (!scannedTagId) {
+      showToast('Veuillez scanner un tag NFC avant de continuer.');
       return;
     }
 
@@ -392,7 +430,7 @@ export default function InscriptionScreen() {
             ]}>
             <Ionicons name="checkmark-circle" size={14} color={colors.successText} />
             <Text style={[styles.tagStatusText, { color: colors.successText }]}>
-              Tag détecté
+              {isScanning ? 'Recherche en cours' : scannedTagId ? 'Tag détecté' : 'En attente'}
             </Text>
           </View>
         </View>
