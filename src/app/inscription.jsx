@@ -343,21 +343,30 @@ export default function InscriptionScreen() {
           : classSection;
 
     setIsSaving(true);
+    let studentWasInserted = false;
     try {
-      const { error } = await supabase.rpc('register_student_with_loan', {
-        p_student_id: Crypto.randomUUID(),
-        p_type: 'student',
-        p_phone_number: phoneNumber,
-        p_full_name: trimmedName,
-        p_email: studentEmail,
-        p_class: classData,
-        p_equipment_id: Crypto.randomUUID(),
-        p_equipment_name: equipmentName,
-        p_nfc_uid: scannedTagId,
-        p_status: 'borrowed',
+      const studentId = Crypto.randomUUID();
+      const { error: studentError } = await supabase.from('students').insert({
+        id: studentId,
+        type: 'student',
+        phone_number: phoneNumber,
+        full_name: trimmedName,
+        email: studentEmail,
+        class: classData,
       });
 
-      if (error) throw error;
+      if (studentError) throw studentError;
+      studentWasInserted = true;
+
+      const { error: loanError } = await supabase.from('loans').insert({
+        equipment_id: Crypto.randomUUID(),
+        student_id: studentId,
+        equipment_name: equipmentName,
+        nfc_uid: scannedTagId,
+        status: 'borrowed',
+      });
+
+      if (loanError) throw loanError;
 
       addStudent({
         fullName: trimmedName,
@@ -377,7 +386,15 @@ export default function InscriptionScreen() {
       router.push('/');
     } catch (error) {
       console.error('Erreur lors de l’enregistrement Supabase :', error);
-      showToast('Échec de l’enregistrement. Vérifiez la configuration Supabase.');
+      if (studentWasInserted) {
+        showToast(
+          'Élève enregistré, mais échec de la création du prêt. Vérifiez la table loans et ses règles RLS.'
+        );
+      } else {
+        showToast(
+          'Échec de l’enregistrement de l’élève. Vérifiez la table students et ses règles RLS.'
+        );
+      }
     } finally {
       setIsSaving(false);
     }
@@ -1110,7 +1127,10 @@ export default function InscriptionScreen() {
             <TextInput
               style={[styles.tagIdText, { color: colors.onSurface }]}
               value={scannedTagId}
-              editable={false}
+              onChangeText={setScannedTagId}
+              placeholder="Saisir ou scanner l’identifiant"
+              placeholderTextColor={colors.outline}
+              autoCapitalize="none"
             />
             <TouchableOpacity
               onPress={handleCopyTag}

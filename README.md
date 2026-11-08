@@ -130,9 +130,11 @@ You can also open the app with the Expo Go mobile app by scanning the QR code fr
 
 <h2 style="color:#0ea5e9;">🗄️ Supabase registration setup</h2>
 
-Before using the registration form, run [`supabase/registration.sql`](./supabase/registration.sql) in the Supabase SQL Editor. It creates the atomic student-and-loan registration function and the anonymous insert policies required by the app.
+Before using the registration form, run [`supabase/registration.sql`](./supabase/registration.sql) in the Supabase SQL Editor. It grants the anonymous role access to the schema and creates the insert policies required by the app.
 
-The app uses a Supabase publishable key in `src/constants/supabase.js`; publishable keys are intended for client apps and are not service-role secrets. The SQL policies allow unauthenticated clients to insert student and loan records, so use this setup only if public registration writes are acceptable for your project.
+The app inserts directly into `students` and `loans` using the Supabase table API. The app uses a Supabase publishable key in `src/constants/supabase.js`; publishable keys are intended for client apps and are not service-role secrets. The SQL policies allow unauthenticated clients to insert student and loan records, so use this setup only if public registration writes are acceptable for your project.
+
+Direct table inserts are separate requests, not a transaction. If a loan insert fails after the student insert succeeds, the app reports that the student was saved but the loan was not.
 
 <h2 style="color:#f43f5e;">✅ Linting</h2>
 
