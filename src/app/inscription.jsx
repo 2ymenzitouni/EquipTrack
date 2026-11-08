@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   Animated,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { useEquipTrack } from '@/context/EquipTrackContext';
 import { Spacing, Radius } from '@/constants/theme';
@@ -37,6 +37,8 @@ export default function InscriptionScreen() {
   const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const hasScannedRef = useRef(false);
 
   // Radar wave pulsing animation
   const pulseAnim = useState(new Animated.Value(1))[0];
@@ -62,51 +64,41 @@ export default function InscriptionScreen() {
 
   const handleScanTag = async () => {
     triggerHapticFeedback();
-    if (Platform.OS === 'web') {
-      showToast('La lecture NFC ne fonctionne pas dans Safari. Ouvrez l’application iOS EquipTrack.');
+    if (cameraPermission?.granted) {
+      hasScannedRef.current = false;
+      setIsScanning(true);
       return;
     }
 
-    setIsScanning(true);
-    showToast('Rapprochez le tag NFC du téléphone pour le scanner.');
-
-    let requestAttempted = false;
     try {
-      const { default: NfcManager, NfcTech } = await import('react-native-nfc-manager');
-      const isSupported = await NfcManager.isSupported();
-      if (!isSupported) {
-        showToast('Ce téléphone ne prend pas en charge la lecture NFC.');
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        showToast('Autorisez l’accès à la caméra pour scanner un code QR.');
         return;
       }
 
-      await NfcManager.start();
-      requestAttempted = true;
-      await NfcManager.requestTechnology(NfcTech.NfcA);
-      const tag = await NfcManager.getTag({ readNdef: false });
-      const tagId = tag?.id?.toUpperCase();
-
-      if (!tagId) {
-        showToast('Identifiant introuvable. Rapprochez le tag et réessayez.');
-        return;
-      }
-
-      setScannedTagId(tagId);
-      showToast(`Tag ${tagId} lu avec succès.`);
-      triggerHapticFeedback();
+      hasScannedRef.current = false;
+      setIsScanning(true);
     } catch (error) {
-      console.error('Erreur lors de la lecture du tag NFC :', error);
-      showToast('Lecture impossible. Vérifiez le NFC et rapprochez le tag.');
-    } finally {
-      try {
-        if (requestAttempted) {
-          await NfcManager.cancelTechnologyRequest();
-        }
-      } catch (error) {
-        console.error('Erreur lors de la fermeture de la session NFC :', error);
-      } finally {
-        setIsScanning(false);
-      }
+      console.error('Erreur lors de la demande d’accès à la caméra :', error);
+      showToast('Impossible d’accéder à la caméra.');
     }
+  };
+
+  const handleQrScanned = ({ data }) => {
+    if (hasScannedRef.current) return;
+    hasScannedRef.current = true;
+
+    const tagId = data.trim();
+    setIsScanning(false);
+    if (!tagId) {
+      showToast('Le code QR ne contient aucun identifiant.');
+      return;
+    }
+
+    setScannedTagId(tagId);
+    showToast('Code QR scanné avec succès.');
+    triggerHapticFeedback();
   };
 
   const handleCopyTag = async () => {
@@ -138,7 +130,7 @@ export default function InscriptionScreen() {
       return;
     }
     if (!scannedTagId) {
-      showToast('Veuillez scanner un tag NFC avant de continuer.');
+      showToast('Veuillez scanner un code QR avant de continuer.');
       return;
     }
 
@@ -403,7 +395,7 @@ export default function InscriptionScreen() {
         </View>
       </View>
 
-      {/* SECTION 2: Dedicated RFID/NFC Tag Scanning Module */}
+      {/* SECTION 2: QR Tag Scanning Module */}
       <View
         style={[
           styles.card,
@@ -414,9 +406,9 @@ export default function InscriptionScreen() {
         ]}>
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardTitleContainer}>
-            <MaterialIcons name="contactless" size={20} color={colors.secondary} />
+            <MaterialIcons name="qr-code-scanner" size={20} color={colors.secondary} />
             <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
-              Badge Sans Contact & RFID
+              Scanner un code QR
             </Text>
           </View>
           {/* Green Success Badge */}
@@ -430,13 +422,13 @@ export default function InscriptionScreen() {
             ]}>
             <Ionicons name="checkmark-circle" size={14} color={colors.successText} />
             <Text style={[styles.tagStatusText, { color: colors.successText }]}>
-              {isScanning ? 'Recherche en cours' : scannedTagId ? 'Tag détecté' : 'En attente'}
+              {isScanning ? 'Recherche en cours' : scannedTagId ? 'Code détecté' : 'En attente'}
             </Text>
           </View>
         </View>
 
         <Text style={[styles.sectionDescription, { color: colors.onSurfaceVariant }]}>
-          Rapprochez le badge NFC ou le porte-clé RFID de la borne ou du terminal mobile.
+          Scannez le code QR pour remplir automatiquement l’identifiant du tag.
         </Text>
 
         {/* Radar Scanner Box */}
@@ -448,16 +440,29 @@ export default function InscriptionScreen() {
               borderColor: colors.outlineVariant,
             },
           ]}>
-          {/* Animated decorative radar circle */}
-          <Animated.View
-            style={[
-              styles.radarWave,
-              {
-                backgroundColor: colors.secondaryFixed,
-                transform: [{ scale: pulseAnim }],
-              },
-            ]}
-          />
+          {isScanning ? (
+            <CameraView
+              style={styles.qrCamera}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleQrScanned}
+              onMountError={(event) => {
+                console.error('Erreur d’ouverture de la caméra :', event.message);
+                setIsScanning(false);
+                showToast('Impossible d’ouvrir la caméra.');
+              }}
+            />
+          ) : (
+            <Animated.View
+              style={[
+                styles.radarWave,
+                {
+                  backgroundColor: colors.secondaryFixed,
+                  transform: [{ scale: pulseAnim }],
+                },
+              ]}
+            />
+          )}
 
           <TouchableOpacity
             style={[
@@ -465,20 +470,23 @@ export default function InscriptionScreen() {
               { backgroundColor: colors.secondary },
               isScanning && { opacity: 0.8 },
             ]}
-            onPress={handleScanTag}
+            onPress={() => {
+              if (isScanning) {
+                setIsScanning(false);
+                return;
+              }
+              handleScanTag();
+            }}
             activeOpacity={0.85}
-            disabled={isScanning}>
-            {isScanning ? (
-              <>
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text style={styles.scanButtonText}>Détection en cours...</Text>
-              </>
-            ) : (
-              <>
-                <MaterialIcons name="sensors" size={22} color="#ffffff" />
-                <Text style={styles.scanButtonText}>Scanner le tag</Text>
-              </>
-            )}
+          >
+            <MaterialIcons
+              name={isScanning ? 'close' : 'qr-code-scanner'}
+              size={22}
+              color="#ffffff"
+            />
+            <Text style={styles.scanButtonText}>
+              {isScanning ? 'Annuler le scan' : 'Scanner le QR code'}
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.radarStatusRow}>
@@ -486,7 +494,9 @@ export default function InscriptionScreen() {
               style={[styles.pingDot, { backgroundColor: colors.success }]}
             />
             <Text style={[styles.radarStatusText, { color: colors.onSurfaceVariant }]}>
-              Capteur prêt pour la lecture 13.56 MHz
+              {isScanning
+                ? 'Placez le code QR devant la caméra'
+                : 'Caméra prête pour scanner un code QR'}
             </Text>
           </View>
         </View>
@@ -498,7 +508,7 @@ export default function InscriptionScreen() {
               Identifiant du tag scanné
             </Text>
             <Text style={[styles.tagFrequencyLabel, { color: colors.primary }]}>
-              MIFARE 13.56MHz
+              Identifiant QR
             </Text>
           </View>
 
@@ -511,7 +521,7 @@ export default function InscriptionScreen() {
               },
             ]}>
             <MaterialIcons
-              name="nfc"
+              name="qr-code"
               size={22}
               color={colors.primary}
               style={styles.tagIdIcon}
@@ -540,7 +550,7 @@ export default function InscriptionScreen() {
             <MaterialIcons name="lock" size={14} color={colors.outline} />
             <Text
               style={[styles.securityFootnoteText, { color: colors.onSurfaceVariant }]}>
-              Badge chiffré et sécurisé avec le protocole de l’établissement.
+              L’identifiant contenu dans le code QR sera associé à cette inscription.
             </Text>
           </View>
         </View>
@@ -708,6 +718,12 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     opacity: 0.35,
+  },
+  qrCamera: {
+    width: '100%',
+    height: 220,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.three,
   },
   scanButton: {
     flexDirection: 'row',

@@ -26,9 +26,11 @@
     "plugins": [
       "expo-router",
       [
-        "react-native-nfc-manager",
+        "expo-camera",
         {
-          "nfcPermission": "Autoriser EquipTrack à lire les tags NFC à proximité."
+          "cameraPermission": "Autoriser EquipTrack à scanner les codes QR.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
