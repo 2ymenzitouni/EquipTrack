@@ -45,6 +45,16 @@ const LICENCE_SPECIALIZATIONS = {
   ],
 };
 
+const MASTER_PROGRAMS = [
+  "Mastère de recherche : Technologies de l'Information et de la Communication",
+  'Mastère de recherche : Ingénierie des Systèmes Intelligents',
+  'Mastère Professionnel : Systèmes Embarqués',
+  'Mastère Professionnel : Réseaux Informatiques & Télécommunications',
+  'Mastère Professionnel : Pilotage des Systèmes Industriels',
+  'Mastère Professionnel IAA Ingénierie Automobile et Aéronautique',
+  'Mastère Professionnel : Smart Green Technologies',
+];
+
 export default function InscriptionScreen() {
   const router = useRouter();
   const { colors, addStudent, showToast, triggerHapticFeedback } = useEquipTrack();
@@ -55,6 +65,7 @@ export default function InscriptionScreen() {
   const [classSection, setClassSection] = useState('');
   const [sectionYear, setSectionYear] = useState(null);
   const [specializationCode, setSpecializationCode] = useState('');
+  const [masterProgram, setMasterProgram] = useState('');
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -70,6 +81,12 @@ export default function InscriptionScreen() {
   const selectedSpecialization = availableSpecializations.find(
     ({ code }) => code === specializationCode
   );
+  const isLicence = classSection === 'Licence';
+  const canSelectSection =
+    isLicence || classSection === 'Mastère';
+  const sectionOptions = isLicence
+    ? LICENCE_YEARS.map(({ year, label }) => ({ value: year, label }))
+    : MASTER_PROGRAMS.map((program) => ({ value: program, label: program }));
 
   // Radar wave pulsing animation
   const pulseAnim = useState(new Animated.Value(1))[0];
@@ -168,6 +185,10 @@ export default function InscriptionScreen() {
       showToast('Veuillez sélectionner une option.');
       return;
     }
+    if (classSection === 'Mastère' && !masterProgram) {
+      showToast('Veuillez sélectionner une section de Mastère.');
+      return;
+    }
     if (!scannedTagId) {
       showToast('Veuillez scanner un code QR avant de continuer.');
       return;
@@ -178,7 +199,7 @@ export default function InscriptionScreen() {
       email: email.trim() || `${fullName.toLowerCase().replace(/\s+/g, '.')}@ecole.fr`,
       equipment: equipment.trim() || 'Tablette Connectée',
       classSection:
-        classSection === 'Licence'
+        isLicence
           ? [
               'Licence LTIC',
               selectedYearLabel,
@@ -186,7 +207,9 @@ export default function InscriptionScreen() {
             ]
               .filter(Boolean)
               .join(' - ')
-          : classSection,
+          : classSection === 'Mastère'
+            ? `${classSection} - ${masterProgram}`
+            : classSection,
       phone: phone.trim() || '+33 6 00 00 00 00',
       tagId: scannedTagId,
       status: 'present',
@@ -386,6 +409,7 @@ export default function InscriptionScreen() {
                     setClassSection(item);
                     setSectionYear(null);
                     setSpecializationCode('');
+                    setMasterProgram('');
                     setClassModalOpen(false);
                     setSectionModalOpen(false);
                     setSpecializationModalOpen(false);
@@ -420,7 +444,7 @@ export default function InscriptionScreen() {
         <View style={styles.inputGroup}>
           <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
             Section
-            {classSection === 'Licence' && (
+            {canSelectSection && (
               <Text style={{ color: colors.error }}> *</Text>
             )}
           </Text>
@@ -430,16 +454,16 @@ export default function InscriptionScreen() {
               {
                 backgroundColor: colors.inputBackground,
                 borderColor: colors.inputBorder,
-                opacity: classSection === 'Licence' ? 1 : 0.6,
+                opacity: canSelectSection ? 1 : 0.6,
               },
             ]}
             onPress={() => {
-              if (classSection === 'Licence') {
+              if (canSelectSection) {
                 setSectionModalOpen(!sectionModalOpen);
               }
             }}
-            activeOpacity={classSection === 'Licence' ? 0.7 : 1}
-            accessibilityState={{ disabled: classSection !== 'Licence' }}>
+            activeOpacity={canSelectSection ? 0.7 : 1}
+            accessibilityState={{ disabled: !canSelectSection }}>
             <MaterialIcons
               name="school"
               size={18}
@@ -449,15 +473,21 @@ export default function InscriptionScreen() {
             <Text
               style={[
                 styles.selectText,
-                { color: sectionYear ? colors.onSurface : colors.outline },
+                {
+                  color:
+                    sectionYear || masterProgram
+                      ? colors.onSurface
+                      : colors.outline,
+                },
               ]}
               numberOfLines={1}>
-              {selectedYearLabel ||
-                (classSection === 'Licence'
-                  ? 'Sélectionner une section'
+              {classSection === 'Licence'
+                ? selectedYearLabel || 'Sélectionner une section'
+                : classSection === 'Mastère'
+                  ? masterProgram || 'Sélectionner une section'
                   : classSection
                     ? 'Options à définir'
-                    : 'Sélectionnez une formation')}
+                    : 'Sélectionnez une formation'}
             </Text>
             <MaterialIcons
               name={sectionModalOpen ? 'expand-less' : 'expand-more'}
@@ -466,7 +496,7 @@ export default function InscriptionScreen() {
             />
           </TouchableOpacity>
 
-          {sectionModalOpen && classSection === 'Licence' && (
+          {sectionModalOpen && canSelectSection && (
             <View
               style={[
                 styles.dropdownMenu,
@@ -475,43 +505,52 @@ export default function InscriptionScreen() {
                   borderColor: colors.cardBorder,
                 },
               ]}>
-              {LICENCE_YEARS.map(({ year, label }) => (
-                <TouchableOpacity
-                  key={year}
-                  style={[
-                    styles.dropdownItem,
-                    year === sectionYear && {
-                      backgroundColor: colors.surfaceContainerLow,
-                    },
-                  ]}
-                  onPress={() => {
-                    setSectionYear(year);
-                    setSpecializationCode('');
-                    setSectionModalOpen(false);
-                    setSpecializationModalOpen(false);
-                  }}>
-                  <Text
+              {sectionOptions.map(({ value, label }) => {
+                const isSelected = isLicence
+                  ? sectionYear === value
+                  : masterProgram === value;
+
+                return (
+                  <TouchableOpacity
+                    key={value}
                     style={[
-                      styles.dropdownItemText,
-                      {
-                        color:
-                          year === sectionYear
+                      styles.dropdownItem,
+                      isSelected && {
+                        backgroundColor: colors.surfaceContainerLow,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (isLicence) {
+                        setSectionYear(value);
+                        setSpecializationCode('');
+                      } else {
+                        setMasterProgram(value);
+                      }
+                      setSectionModalOpen(false);
+                      setSpecializationModalOpen(false);
+                    }}>
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        {
+                          color: isSelected
                             ? colors.primary
                             : colors.onSurface,
-                        fontWeight: year === sectionYear ? '700' : '400',
-                      },
-                    ]}>
-                    {label}
-                  </Text>
-                  {year === sectionYear && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={18}
-                      color={colors.primary}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
+                          fontWeight: isSelected ? '700' : '400',
+                        },
+                      ]}>
+                      {label}
+                    </Text>
+                    {isSelected && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
@@ -926,7 +965,9 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   dropdownItemText: {
+    flex: 1,
     fontSize: 13,
+    marginRight: Spacing.two,
   },
   tagStatusChip: {
     flexDirection: 'row',
