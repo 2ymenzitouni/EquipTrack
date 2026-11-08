@@ -63,7 +63,7 @@ export default function InscriptionScreen() {
   const handleScanTag = async () => {
     triggerHapticFeedback();
     if (Platform.OS === 'web') {
-      showToast('La lecture NFC nécessite un téléphone compatible NFC.');
+      showToast('La lecture NFC ne fonctionne pas dans Safari. Ouvrez l’application iOS EquipTrack.');
       return;
     }
 
