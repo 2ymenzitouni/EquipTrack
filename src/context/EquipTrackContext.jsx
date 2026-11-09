@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { useColorScheme, Platform, Linking, Alert } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/theme';
@@ -201,9 +201,9 @@ export function EquipTrackProvider({ children }) {
     return notifications.filter((n) => !n.read).length;
   }, [notifications]);
 
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
     setToastMessage(msg);
-  };
+  }, []);
 
   useEffect(() => {
     if (!toastMessage) return;

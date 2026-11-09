@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,35 +9,201 @@ import {
   Modal,
   Pressable,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEquipTrack } from '@/context/EquipTrackContext';
+import { supabase } from '@/constants/supabase';
 import { Spacing, Radius } from '@/constants/theme';
 
 const FILTER_CLASSES = [
   'Tous',
-  'Terminale S2',
-  'Première A',
-  'Seconde 4',
-  'Terminale ES1',
-  '3ème B',
+  'Licence',
+  'Mastère',
+  'Cycle Ingénieur',
 ];
+
+function formatClassSection(classData) {
+  let value = classData;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return value || 'Formation non renseignée';
+    }
+  }
+  if (!value || typeof value !== 'object') return 'Formation non renseignée';
+
+  const option =
+    typeof value.option === 'string'
+      ? value.option
+      : value.option?.name || value.option?.code;
+  return [
+    value.program,
+    value.section && value.section !== value.program ? value.section : null,
+    value.specialty,
+    value.class,
+    value.year ? `Année ${value.year}` : null,
+    option,
+  ]
+    .filter(Boolean)
+    .join(' - ');
+}
 
 export default function RepertoireScreen() {
   const router = useRouter();
   const {
     colors,
-    students,
     updateStudentStatus,
     deleteStudent,
     callPhone,
     triggerHapticFeedback,
+    showToast,
   } = useEquipTrack();
 
+  const [students, setStudents] = useState([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('Tous');
   const [activeMenuStudent, setActiveMenuStudent] = useState(null);
+  const [scanningStudent, setScanningStudent] = useState(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const hasScannedRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadRegisteredStudents = async () => {
+        setIsLoadingStudents(true);
+        const { data: studentRows, error: studentsError } = await supabase
+          .from('students')
+          .select('id,type,phone_number,full_name,email,class,created_at')
+          .order('created_at', { ascending: false });
+
+        if (studentsError) {
+          console.error('Erreur lors du chargement des inscrits :', studentsError);
+          if (isActive) {
+            setStudents([]);
+            showToast('Impossible de charger les inscrits depuis Supabase.');
+            setIsLoadingStudents(false);
+          }
+          return;
+        }
+
+        if (!studentRows?.length) {
+          if (isActive) {
+            setStudents([]);
+            setIsLoadingStudents(false);
+          }
+          return;
+        }
+
+        const { data: loanRows, error: loansError } = await supabase
+          .from('loans')
+          .select('student_id,equipment_name,nfc_uid')
+          .in(
+            'student_id',
+            studentRows.map((student) => student.id)
+          );
+
+        if (loansError) {
+          console.error('Erreur lors du chargement des prêts :', loansError);
+          if (isActive) {
+            setStudents([]);
+            showToast('Impossible de charger les tags et équipements associés.');
+            setIsLoadingStudents(false);
+          }
+          return;
+        }
+
+        const loansByStudent = new Map();
+        loanRows?.forEach((loan) => {
+          if (!loansByStudent.has(loan.student_id)) {
+            loansByStudent.set(loan.student_id, loan);
+          }
+        });
+
+        if (isActive) {
+          setStudents(
+            studentRows.map((student) => {
+              const loan = loansByStudent.get(student.id);
+              return {
+                id: student.id,
+                fullName: student.full_name || 'Nom non renseigné',
+                email: student.email || '',
+                phone: student.phone_number || '',
+                classSection: formatClassSection(student.class),
+                equipment: loan?.equipment_name || '',
+                tagId: loan?.nfc_uid || '',
+                status: 'present',
+                registeredAt: student.created_at,
+              };
+            })
+          );
+          setIsLoadingStudents(false);
+        }
+      };
+
+      loadRegisteredStudents().catch((error) => {
+        console.error('Erreur inattendue lors du chargement des inscrits :', error);
+        if (isActive) {
+          setStudents([]);
+          showToast('Impossible de charger les inscrits depuis Supabase.');
+          setIsLoadingStudents(false);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [showToast])
+  );
+
+  const handleScanQr = async (student) => {
+    triggerHapticFeedback();
+    if (!student.tagId) {
+      showToast('Aucun identifiant QR n’est enregistré pour cet élève.');
+      return;
+    }
+
+    if (cameraPermission?.granted) {
+      hasScannedRef.current = false;
+      setScanningStudent(student);
+      return;
+    }
+
+    try {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        showToast('Autorisez l’accès à la caméra pour scanner le code QR.');
+        return;
+      }
+
+      hasScannedRef.current = false;
+      setScanningStudent(student);
+    } catch (error) {
+      console.error('Erreur lors de la demande d’accès à la caméra :', error);
+      showToast('Impossible d’accéder à la caméra.');
+    }
+  };
+
+  const handleQrScanned = ({ data }) => {
+    if (hasScannedRef.current || !scanningStudent) return;
+    hasScannedRef.current = true;
+
+    const matches =
+      data.trim().toLowerCase() === scanningStudent.tagId.trim().toLowerCase();
+    setScanningStudent(null);
+    if (matches) {
+      showToast(`QR vérifié : ${scanningStudent.fullName}.`);
+      triggerHapticFeedback();
+    } else {
+      showToast(`Ce QR ne correspond pas au tag de ${scanningStudent.fullName}.`);
+    }
+  };
 
   // Filter students by query and selected class
   const filteredStudents = useMemo(() => {
@@ -190,7 +356,14 @@ export default function RepertoireScreen() {
 
         {/* Student Cards List */}
         <View style={styles.listContainer}>
-          {filteredStudents.length === 0 ? (
+          {isLoadingStudents ? (
+            <View style={styles.loadingState}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.onSurfaceVariant }]}>
+                Chargement des inscrits...
+              </Text>
+            </View>
+          ) : filteredStudents.length === 0 ? (
             <View
               style={[
                 styles.emptyStateCard,
@@ -384,16 +557,39 @@ export default function RepertoireScreen() {
                       </View>
                     </View>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.callButton,
-                        { backgroundColor: colors.primaryContainer },
-                      ]}
-                      onPress={() => callPhone(student.phone)}
-                      activeOpacity={0.85}>
-                      <MaterialIcons name="phone" size={17} color="#ffffff" />
-                      <Text style={styles.callButtonText}>Appeler</Text>
-                    </TouchableOpacity>
+                    <View style={styles.cardActions}>
+                      <TouchableOpacity
+                        style={[
+                          styles.callButton,
+                          { backgroundColor: colors.primaryContainer },
+                        ]}
+                        onPress={() => callPhone(student.phone)}
+                        activeOpacity={0.85}>
+                        <MaterialIcons name="phone" size={17} color="#ffffff" />
+                        <Text style={styles.callButtonText}>Appeler</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.scanQrButton,
+                          {
+                            backgroundColor: colors.surfaceContainerLow,
+                            borderColor: colors.surfaceContainerHighest,
+                          },
+                          !student.tagId && styles.disabledAction,
+                        ]}
+                        onPress={() => handleScanQr(student)}
+                        disabled={!student.tagId}
+                        activeOpacity={0.85}>
+                        <MaterialIcons
+                          name="qr-code-scanner"
+                          size={17}
+                          color={colors.primary}
+                        />
+                        <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
+                          Scan QR
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               );
@@ -467,6 +663,13 @@ export default function RepertoireScreen() {
                   onPress={() => {
                     if (activeMenuStudent) {
                       updateStudentStatus(activeMenuStudent.id, st);
+                      setStudents((current) =>
+                        current.map((student) =>
+                          student.id === activeMenuStudent.id
+                            ? { ...student, status: st }
+                            : student
+                        )
+                      );
                       setActiveMenuStudent(null);
                     }
                   }}>
@@ -486,6 +689,9 @@ export default function RepertoireScreen() {
               onPress={() => {
                 if (activeMenuStudent) {
                   deleteStudent(activeMenuStudent.id);
+                  setStudents((current) =>
+                    current.filter((student) => student.id !== activeMenuStudent.id)
+                  );
                   setActiveMenuStudent(null);
                 }
               }}>
@@ -507,6 +713,40 @@ export default function RepertoireScreen() {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      <Modal
+        visible={!!scanningStudent}
+        animationType="slide"
+        onRequestClose={() => setScanningStudent(null)}>
+        <View style={styles.qrScannerModal}>
+          {scanningStudent && (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleQrScanned}
+              onMountError={(event) => {
+                console.error('Erreur d’ouverture de la caméra :', event.message);
+                setScanningStudent(null);
+                showToast('Impossible d’ouvrir la caméra.');
+              }}
+            />
+          )}
+          <View style={styles.qrScannerHeader}>
+            <TouchableOpacity
+              style={styles.qrScannerClose}
+              onPress={() => setScanningStudent(null)}
+              accessibilityLabel="Fermer le scanner QR">
+              <Ionicons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.qrScannerTitle}>Scanner le QR de l’élève</Text>
+            <Text style={styles.qrScannerSubtitle}>
+              {scanningStudent?.fullName}
+            </Text>
+          </View>
+          <View style={styles.qrScannerFrame} pointerEvents="none" />
+        </View>
       </Modal>
     </View>
   );
@@ -730,6 +970,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  cardActions: {
+    alignItems: 'stretch',
+    gap: Spacing.two,
+  },
+  scanQrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  scanQrButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  disabledAction: {
+    opacity: 0.45,
+  },
   emptyStateCard: {
     padding: Spacing.six,
     borderRadius: Radius['2xl'],
@@ -852,5 +1113,42 @@ const styles = StyleSheet.create({
   cancelText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+  qrScannerModal: {
+    flex: 1,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrScannerHeader: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 24,
+    left: Spacing.four,
+    right: Spacing.four,
+    alignItems: 'center',
+  },
+  qrScannerClose: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    padding: Spacing.two,
+  },
+  qrScannerTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  qrScannerSubtitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginTop: Spacing.one,
+  },
+  qrScannerFrame: {
+    width: '72%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderRadius: Radius.xl,
   },
 });
