@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   Switch,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEquipTrack } from '@/context/EquipTrackContext';
 import { Spacing, Radius } from '@/constants/theme';
 
@@ -27,6 +30,10 @@ export default function ParametresScreen() {
   } = useEquipTrack();
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [qrCode, setQrCode] = useState('');
+  const [isQrScannerVisible, setIsQrScannerVisible] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const hasScannedRef = useRef(false);
 
   const handleCheckUpdate = () => {
     triggerHapticFeedback();
@@ -35,6 +42,38 @@ export default function ParametresScreen() {
       setIsCheckingUpdate(false);
       showToast('Votre application est à jour (v2.4.1 Build 890).');
     }, 900);
+  };
+
+  const handleOpenQrScanner = async () => {
+    triggerHapticFeedback();
+    if (cameraPermission?.granted) {
+      hasScannedRef.current = false;
+      setIsQrScannerVisible(true);
+      return;
+    }
+
+    try {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        showToast('Autorisez l’accès à la caméra pour scanner le code QR.');
+        return;
+      }
+
+      hasScannedRef.current = false;
+      setIsQrScannerVisible(true);
+    } catch (error) {
+      console.error('Erreur lors de la demande d’accès à la caméra :', error);
+      showToast('Impossible d’accéder à la caméra.');
+    }
+  };
+
+  const handleQrScanned = ({ data }) => {
+    if (hasScannedRef.current) return;
+    hasScannedRef.current = true;
+    setQrCode(data);
+    setIsQrScannerVisible(false);
+    triggerHapticFeedback();
+    showToast('Code QR lu et ajouté au champ.');
   };
 
   const handleClearHistory = () => {
@@ -419,6 +458,40 @@ export default function ParametresScreen() {
             {isCheckingUpdate ? 'Vérification...' : 'Mettre à jour'}
           </Text>
         </TouchableOpacity>
+
+        <TextInput
+          style={[
+            styles.qrCodeInput,
+            {
+              color: colors.onSurface,
+              backgroundColor: colors.surfaceContainerLow,
+              borderColor: colors.outlineVariant,
+            },
+          ]}
+          value={qrCode}
+          onChangeText={setQrCode}
+          placeholder="Le code lu depuis le QR apparaîtra ici"
+          placeholderTextColor={colors.outline}
+          multiline
+          textAlignVertical="top"
+          accessibilityLabel="Code lu depuis le QR"
+        />
+
+        <TouchableOpacity
+          style={[
+            styles.scanQrButton,
+            {
+              backgroundColor: colors.surfaceContainerLow,
+              borderColor: colors.outlineVariant,
+            },
+          ]}
+          onPress={handleOpenQrScanner}
+          activeOpacity={0.85}>
+          <MaterialIcons name="qr-code-scanner" size={18} color={colors.primary} />
+          <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
+            Scanner un QR code
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* SECTION 3: Lecteur NFC & Badges RFID */}
@@ -652,6 +725,40 @@ export default function ParametresScreen() {
           Édifice Numérique • Plateforme certifiée Éducation & Gestion d’équipements scolaires.
         </Text>
       </View>
+
+      <Modal
+        visible={isQrScannerVisible}
+        animationType="slide"
+        onRequestClose={() => setIsQrScannerVisible(false)}>
+        <View style={styles.qrScannerModal}>
+          {isQrScannerVisible && (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleQrScanned}
+              onMountError={(event) => {
+                console.error('Erreur d’ouverture de la caméra :', event.message);
+                setIsQrScannerVisible(false);
+                showToast('Impossible d’ouvrir la caméra.');
+              }}
+            />
+          )}
+          <View style={styles.qrScannerHeader}>
+            <TouchableOpacity
+              style={styles.qrScannerClose}
+              onPress={() => setIsQrScannerVisible(false)}
+              accessibilityLabel="Fermer le scanner QR">
+              <MaterialIcons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.qrScannerTitle}>Scanner un QR code</Text>
+            <Text style={styles.qrScannerSubtitle}>
+              Le code lu sera ajouté au champ
+            </Text>
+          </View>
+          <View style={styles.qrScannerFrame} pointerEvents="none" />
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -860,6 +967,65 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  qrCodeInput: {
+    minHeight: 100,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.three,
+    marginTop: Spacing.three,
+    fontSize: 14,
+  },
+  scanQrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.two,
+    height: 44,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    marginTop: Spacing.two,
+  },
+  scanQrButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  qrScannerModal: {
+    flex: 1,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrScannerHeader: {
+    position: 'absolute',
+    top: 56,
+    left: Spacing.four,
+    right: Spacing.four,
+    alignItems: 'center',
+  },
+  qrScannerClose: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    padding: Spacing.two,
+  },
+  qrScannerTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  qrScannerSubtitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginTop: Spacing.one,
+  },
+  qrScannerFrame: {
+    width: '72%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderRadius: Radius.xl,
   },
   settingToggleRow: {
     flexDirection: 'row',
