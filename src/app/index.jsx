@@ -208,7 +208,10 @@ export default function RepertoireScreen() {
       );
       triggerHapticFeedback();
     } else {
-      showToast(`Ce QR ne correspond pas au tag de ${scanningStudent.fullName}.`);
+      showToast(
+        `Ce QR ne correspond pas au tag de ${scanningStudent.fullName}.`,
+        'error'
+      );
     }
   };
 

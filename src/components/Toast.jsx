@@ -13,6 +13,8 @@ export function Toast() {
     typeof toastMessage === 'string' ? toastMessage : toastMessage.message;
   const isSuccess =
     typeof toastMessage === 'object' && toastMessage.variant === 'success';
+  const isError =
+    typeof toastMessage === 'object' && toastMessage.variant === 'error';
 
   return (
     <View style={styles.toastContainer} pointerEvents="none">
@@ -20,24 +22,32 @@ export function Toast() {
         style={[
           styles.toastBox,
           isSuccess && styles.successToastBox,
+          isError && styles.errorToastBox,
           {
-            backgroundColor: isSuccess
-              ? colors.successContainer
+            backgroundColor: isSuccess || isError
+              ? isSuccess
+                ? colors.successContainer
+                : colors.errorContainer
               : colors.surfaceContainerLowest === '#ffffff'
               ? '#1e293b'
               : '#334155',
-            borderColor: isSuccess ? colors.successBorder : colors.outlineVariant,
+            borderColor: isSuccess
+              ? colors.successBorder
+              : isError
+              ? colors.error
+              : colors.outlineVariant,
           },
         ]}>
         <Ionicons
-          name="checkmark-circle"
+          name={isError ? 'alert-circle' : 'checkmark-circle'}
           size={18}
-          color={isSuccess ? colors.success : '#89ceff'}
+          color={isSuccess ? colors.success : isError ? colors.error : '#89ceff'}
         />
         <Text
           style={[
             styles.toastText,
             isSuccess && { color: colors.successText },
+            isError && { color: colors.onErrorContainer },
           ]}>
           {message}
         </Text>
@@ -77,6 +87,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   successToastBox: {
+    borderWidth: 1.5,
+  },
+  errorToastBox: {
     borderWidth: 1.5,
   },
 });
