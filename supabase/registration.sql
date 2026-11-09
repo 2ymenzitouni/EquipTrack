@@ -1,5 +1,5 @@
 GRANT USAGE ON SCHEMA public TO anon;
-GRANT INSERT ON TABLE public.students, public.loans TO anon;
+GRANT INSERT, DELETE ON TABLE public.students, public.loans TO anon;
 
 DROP POLICY IF EXISTS "Allow anonymous student registration" ON public.students;
 CREATE POLICY "Allow anonymous student registration"
@@ -14,3 +14,17 @@ CREATE POLICY "Allow anonymous loan registration"
   FOR INSERT
   TO anon
   WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anonymous student deletion" ON public.students;
+CREATE POLICY "Allow anonymous student deletion"
+  ON public.students
+  FOR DELETE
+  TO anon
+  USING (true);
+
+DROP POLICY IF EXISTS "Allow anonymous loan deletion" ON public.loans;
+CREATE POLICY "Allow anonymous loan deletion"
+  ON public.loans
+  FOR DELETE
+  TO anon
+  USING (true);

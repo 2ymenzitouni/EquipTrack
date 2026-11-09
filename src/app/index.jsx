@@ -191,7 +191,7 @@ export default function RepertoireScreen() {
     }
   };
 
-  const handleQrScanned = ({ data }) => {
+  const handleQrScanned = async ({ data }) => {
     if (hasScannedRef.current || !scanningStudent) return;
     hasScannedRef.current = true;
 
@@ -199,11 +199,67 @@ export default function RepertoireScreen() {
       data.trim().toLowerCase() === scanningStudent.tagId.trim().toLowerCase();
     setScanningStudent(null);
     if (matches) {
+      if (!scanningStudent.email) {
+        showToast(
+          `Aucune adresse e-mail n’est enregistrée pour ${scanningStudent.fullName}; suppression annulée.`,
+          'error'
+        );
+        return;
+      }
+
+      try {
+        const { error: loansError } = await supabase
+          .from('loans')
+          .delete()
+          .eq('student_id', scanningStudent.id);
+
+        if (loansError) {
+          console.error('Erreur lors de la suppression des prêts :', loansError);
+          showToast(
+            `Impossible de supprimer les prêts de ${scanningStudent.fullName}; l’élève n’a pas été supprimé.`,
+            'error'
+          );
+          return;
+        }
+
+        const { data: deletedStudent, error: studentError } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', scanningStudent.id)
+          .eq('email', scanningStudent.email)
+          .select('id')
+          .maybeSingle();
+
+        if (studentError) {
+          console.error('Erreur lors de la suppression de l’élève :', studentError);
+          showToast(
+            `Les prêts ont été supprimés, mais la suppression de ${scanningStudent.fullName} a échoué.`,
+            'error'
+          );
+          return;
+        }
+
+        if (!deletedStudent) {
+          showToast(
+            `Les prêts ont été supprimés, mais l’élève n’a pas été trouvé par son identifiant et son e-mail.`,
+            'error'
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Erreur inattendue lors de la suppression après scan QR :', error);
+        showToast(
+          `Erreur lors de la suppression de ${scanningStudent.fullName} depuis Supabase.`,
+          'error'
+        );
+        return;
+      }
+
       setStudents((current) =>
         current.filter((student) => student.id !== scanningStudent.id)
       );
       showToast(
-        `QR vérifié : ${scanningStudent.fullName} retiré du répertoire.`,
+        `QR vérifié : ${scanningStudent.fullName} et ses prêts ont été supprimés de Supabase.`,
         'success'
       );
       triggerHapticFeedback();
