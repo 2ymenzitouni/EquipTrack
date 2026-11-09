@@ -25,6 +25,8 @@ const NFC_TECHNOLOGIES = {
 
 export async function readNfcTagId() {
   let requestAttempted = false;
+  let scanError;
+
   try {
     await NfcManager.start();
     if (!(await NfcManager.isSupported())) {
@@ -41,9 +43,17 @@ export async function readNfcTagId() {
       throw new Error('NFC_TAG_ID_UNAVAILABLE');
     }
     return tag.id.toUpperCase();
+  } catch (error) {
+    scanError = error;
+    throw error;
   } finally {
     if (requestAttempted) {
-      await NfcManager.cancelTechnologyRequest({ throwOnError: true });
+      try {
+        await NfcManager.cancelTechnologyRequest();
+      } catch (cleanupError) {
+        console.error('Erreur lors de la fermeture de la session NFC :', cleanupError);
+        if (!scanError) throw cleanupError;
+      }
     }
   }
 }

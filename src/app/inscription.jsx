@@ -10,7 +10,7 @@ import {
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { readNfcTagId } from '@/utils/nfcScanner';
 import * as Crypto from 'expo-crypto';
 import * as Clipboard from 'expo-clipboard';
 import { useEquipTrack } from '@/context/EquipTrackContext';
@@ -111,15 +111,14 @@ export default function InscriptionScreen() {
   const [engineeringOption, setEngineeringOption] = useState('');
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
-  const [isScanning, setIsScanning] = useState(false);
+  const [isScanningNfc, setIsScanningNfc] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
   const [specializationModalOpen, setSpecializationModalOpen] = useState(false);
   const [engineeringYearModalOpen, setEngineeringYearModalOpen] = useState(false);
   const [engineeringOptionModalOpen, setEngineeringOptionModalOpen] = useState(false);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const hasScannedRef = useRef(false);
+  const nfcScanRef = useRef(false);
   const availableSpecializations = LICENCE_SPECIALIZATIONS[sectionYear] || [];
   const selectedYearLabel = LICENCE_YEARS.find(
     ({ year }) => year === sectionYear
@@ -175,42 +174,31 @@ export default function InscriptionScreen() {
   }, [pulseAnim]);
 
   const handleScanTag = async () => {
+    if (nfcScanRef.current) return;
+    nfcScanRef.current = true;
+    setIsScanningNfc(true);
     triggerHapticFeedback();
-    if (cameraPermission?.granted) {
-      hasScannedRef.current = false;
-      setIsScanning(true);
-      return;
-    }
 
     try {
-      const permission = await requestCameraPermission();
-      if (!permission.granted) {
-        showToast('Autorisez l’accès à la caméra pour scanner un code QR.');
-        return;
-      }
-
-      hasScannedRef.current = false;
-      setIsScanning(true);
+      const tagId = await readNfcTagId();
+      setScannedTagId(tagId);
+      showToast('Tag NFC scanné avec succès.');
+      triggerHapticFeedback();
     } catch (error) {
-      console.error('Erreur lors de la demande d’accès à la caméra :', error);
-      showToast('Impossible d’accéder à la caméra.');
+      console.error('Erreur lors de la lecture du tag NFC :', error);
+      if (error?.message === 'NFC_UNSUPPORTED') {
+        showToast('Ce téléphone ne prend pas en charge la lecture NFC.');
+      } else if (error?.message === 'NFC_NATIVE_APP_REQUIRED') {
+        showToast('La lecture NFC nécessite l’application iOS ou Android.');
+      } else if (error?.message === 'NFC_TAG_ID_UNAVAILABLE') {
+        showToast('Le tag détecté ne fournit pas d’identifiant lisible.');
+      } else {
+        showToast('Lecture NFC annulée ou impossible. Réessayez avec un tag compatible.');
+      }
+    } finally {
+      nfcScanRef.current = false;
+      setIsScanningNfc(false);
     }
-  };
-
-  const handleQrScanned = ({ data }) => {
-    if (hasScannedRef.current) return;
-    hasScannedRef.current = true;
-
-    const tagId = data.trim();
-    setIsScanning(false);
-    if (!tagId) {
-      showToast('Le code QR ne contient aucun identifiant.');
-      return;
-    }
-
-    setScannedTagId(tagId);
-    showToast('Code QR scanné avec succès.');
-    triggerHapticFeedback();
   };
 
   const handleCopyTag = async () => {
@@ -271,7 +259,7 @@ export default function InscriptionScreen() {
       return;
     }
     if (!scannedTagId) {
-      showToast('Veuillez scanner un code QR avant de continuer.');
+      showToast('Veuillez scanner un tag NFC avant de continuer.');
       return;
     }
 
@@ -992,7 +980,7 @@ export default function InscriptionScreen() {
         </View>
       </View>
 
-      {/* SECTION 2: QR Tag Scanning Module */}
+      {/* SECTION 2: NFC Tag Scanning Module */}
       <View
         style={[
           styles.card,
@@ -1003,9 +991,9 @@ export default function InscriptionScreen() {
         ]}>
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardTitleContainer}>
-            <MaterialIcons name="qr-code-scanner" size={20} color={colors.secondary} />
+            <MaterialIcons name="nfc" size={20} color={colors.secondary} />
             <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
-              Scanner un code QR
+              Scanner un tag NFC
             </Text>
           </View>
           {/* Green Success Badge */}
@@ -1019,13 +1007,13 @@ export default function InscriptionScreen() {
             ]}>
             <Ionicons name="checkmark-circle" size={14} color={colors.successText} />
             <Text style={[styles.tagStatusText, { color: colors.successText }]}>
-              {isScanning ? 'Recherche en cours' : scannedTagId ? 'Code détecté' : 'En attente'}
+              {isScanningNfc ? 'Lecture en cours' : scannedTagId ? 'Tag détecté' : 'En attente'}
             </Text>
           </View>
         </View>
 
         <Text style={[styles.sectionDescription, { color: colors.onSurfaceVariant }]}>
-          Scannez le code QR pour remplir automatiquement l’identifiant du tag.
+          Approchez un tag NFC du téléphone pour remplir automatiquement son identifiant.
         </Text>
 
         {/* Radar Scanner Box */}
@@ -1037,52 +1025,33 @@ export default function InscriptionScreen() {
               borderColor: colors.outlineVariant,
             },
           ]}>
-          {isScanning ? (
-            <CameraView
-              style={styles.qrCamera}
-              facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={handleQrScanned}
-              onMountError={(event) => {
-                console.error('Erreur d’ouverture de la caméra :', event.message);
-                setIsScanning(false);
-                showToast('Impossible d’ouvrir la caméra.');
-              }}
-            />
-          ) : (
-            <Animated.View
-              style={[
-                styles.radarWave,
-                {
-                  backgroundColor: colors.secondaryFixed,
-                  transform: [{ scale: pulseAnim }],
-                },
-              ]}
-            />
-          )}
+          <Animated.View
+            style={[
+              styles.radarWave,
+              {
+                backgroundColor: colors.secondaryFixed,
+                transform: [{ scale: pulseAnim }],
+              },
+            ]}
+          />
 
           <TouchableOpacity
             style={[
               styles.scanButton,
               { backgroundColor: colors.secondary },
-              isScanning && { opacity: 0.8 },
+              isScanningNfc && { opacity: 0.8 },
             ]}
-            onPress={() => {
-              if (isScanning) {
-                setIsScanning(false);
-                return;
-              }
-              handleScanTag();
-            }}
+            onPress={handleScanTag}
+            disabled={isScanningNfc}
             activeOpacity={0.85}
           >
             <MaterialIcons
-              name={isScanning ? 'close' : 'qr-code-scanner'}
+              name="nfc"
               size={22}
               color="#ffffff"
             />
             <Text style={styles.scanButtonText}>
-              {isScanning ? 'Annuler le scan' : 'Scanner le QR code'}
+              {isScanningNfc ? 'Lecture en cours...' : 'Scanner le tag NFC'}
             </Text>
           </TouchableOpacity>
 
@@ -1091,9 +1060,9 @@ export default function InscriptionScreen() {
               style={[styles.pingDot, { backgroundColor: colors.success }]}
             />
             <Text style={[styles.radarStatusText, { color: colors.onSurfaceVariant }]}>
-              {isScanning
-                ? 'Placez le code QR devant la caméra'
-                : 'Caméra prête pour scanner un code QR'}
+              {isScanningNfc
+                ? 'Approchez le tag NFC du téléphone'
+                : 'Prêt à lire un tag NFC'}
             </Text>
           </View>
         </View>
@@ -1105,7 +1074,7 @@ export default function InscriptionScreen() {
               Identifiant du tag scanné
             </Text>
             <Text style={[styles.tagFrequencyLabel, { color: colors.primary }]}>
-              Identifiant QR
+              Identifiant NFC
             </Text>
           </View>
 
@@ -1118,7 +1087,7 @@ export default function InscriptionScreen() {
               },
             ]}>
             <MaterialIcons
-              name="qr-code"
+              name="nfc"
               size={22}
               color={colors.primary}
               style={styles.tagIdIcon}
@@ -1127,7 +1096,7 @@ export default function InscriptionScreen() {
               style={[styles.tagIdText, { color: colors.onSurface }]}
               value={scannedTagId}
               onChangeText={setScannedTagId}
-              placeholder="Saisir ou scanner l’identifiant"
+              placeholder="Saisir ou scanner l’identifiant NFC"
               placeholderTextColor={colors.outline}
               autoCapitalize="none"
             />
@@ -1150,7 +1119,7 @@ export default function InscriptionScreen() {
             <MaterialIcons name="lock" size={14} color={colors.outline} />
             <Text
               style={[styles.securityFootnoteText, { color: colors.onSurfaceVariant }]}>
-              L’identifiant contenu dans le code QR sera associé à cette inscription.
+              L’identifiant contenu dans le tag NFC sera associé à cette inscription.
             </Text>
           </View>
         </View>
@@ -1326,12 +1295,6 @@ const styles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     opacity: 0.35,
-  },
-  qrCamera: {
-    width: '100%',
-    height: 220,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.three,
   },
   scanButton: {
     flexDirection: 'row',

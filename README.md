@@ -128,8 +128,6 @@ npm run web
 
 You can also open the app with the Expo Go mobile app by scanning the QR code from the terminal output.
 
-NFC tag scanning is available only in a native iOS or Android build on a compatible physical device; it is not available in Expo Go or the web app. After changing the NFC dependency or plugin configuration, create a new native build before testing the scanner.
-
 <h2 style="color:#0ea5e9;">🗄️ Supabase registration setup</h2>
 
 Before using registration and QR-based deletion, run [`supabase/registration.sql`](./supabase/registration.sql) in the Supabase SQL Editor. It grants the anonymous role access to the schema and creates the insert/delete policies used by the app.

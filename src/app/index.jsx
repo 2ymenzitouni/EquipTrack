@@ -13,7 +13,6 @@ import { AppText as Text, AppTextInput as TextInput } from '@/components/Configu
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { readNfcTagId } from '@/utils/nfcScanner';
 import { useEquipTrack } from '@/context/EquipTrackContext';
 import { supabase } from '@/constants/supabase';
 import { Spacing, Radius } from '@/constants/theme';
@@ -71,11 +70,8 @@ export default function RepertoireScreen() {
   const [selectedClass, setSelectedClass] = useState('Tous');
   const [activeMenuStudent, setActiveMenuStudent] = useState(null);
   const [scanningStudent, setScanningStudent] = useState(null);
-  const [scannedNfcId, setScannedNfcId] = useState('');
-  const [isScanningNfc, setIsScanningNfc] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const hasScannedRef = useRef(false);
-  const nfcScanRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -275,34 +271,6 @@ export default function RepertoireScreen() {
     }
   };
 
-  const handleScanNfc = async () => {
-    if (nfcScanRef.current) return;
-    nfcScanRef.current = true;
-    setIsScanningNfc(true);
-    triggerHapticFeedback();
-
-    try {
-      const tagId = await readNfcTagId();
-      setScannedNfcId(tagId);
-      showToast(`Identifiant NFC lu : ${tagId}`, 'success');
-      triggerHapticFeedback();
-    } catch (error) {
-      console.error('Erreur lors de la lecture du tag NFC :', error);
-      if (error.message === 'NFC_UNSUPPORTED') {
-        showToast('Ce téléphone ne prend pas en charge la lecture NFC.', 'error');
-      } else if (error.message === 'NFC_NATIVE_APP_REQUIRED') {
-        showToast('La lecture NFC nécessite l’application iOS ou Android.', 'error');
-      } else if (error.message === 'NFC_TAG_ID_UNAVAILABLE') {
-        showToast('Le tag détecté ne fournit pas d’identifiant lisible.', 'error');
-      } else {
-        showToast('Lecture NFC annulée ou impossible. Réessayez avec un tag compatible.', 'error');
-      }
-    } finally {
-      nfcScanRef.current = false;
-      setIsScanningNfc(false);
-    }
-  };
-
   // Filter students by query and selected class
   const filteredStudents = useMemo(() => {
     return students.filter((student) => {
@@ -375,53 +343,6 @@ export default function RepertoireScreen() {
               {filteredStudents.length} utilisateur{filteredStudents.length !== 1 ? 's' : ''} enregistré{filteredStudents.length !== 1 ? 's' : ''}
             </Text>
           </View>
-        </View>
-
-        <View
-          style={[
-            styles.nfcReaderCard,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.cardBorder,
-            },
-          ]}>
-          <Text style={[styles.nfcReaderLabel, { color: colors.onSurface }]}>
-            Identifiant du tag scanné
-          </Text>
-          <TextInput
-            style={[
-              styles.nfcReaderInput,
-              {
-                color: colors.onSurface,
-                backgroundColor: colors.surfaceContainerLow,
-                borderColor: colors.outlineVariant,
-              },
-            ]}
-            value={scannedNfcId}
-            placeholder="L’identifiant NFC apparaîtra ici"
-            placeholderTextColor={colors.outline}
-            editable={false}
-            selectTextOnFocus
-            accessibilityLabel="Identifiant du tag scanné"
-          />
-          <TouchableOpacity
-            style={[
-              styles.nfcReaderButton,
-              { backgroundColor: colors.primaryContainer },
-              isScanningNfc && styles.disabledAction,
-            ]}
-            onPress={handleScanNfc}
-            disabled={isScanningNfc}
-            activeOpacity={0.85}>
-            {isScanningNfc ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <MaterialIcons name="nfc" size={19} color="#ffffff" />
-            )}
-            <Text style={styles.nfcReaderButtonText}>
-              {isScanningNfc ? 'Lecture en cours...' : 'Scanner un tag NFC'}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Quick Search Bar */}
@@ -996,38 +917,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.3,
-  },
-  nfcReaderCard: {
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    padding: Spacing.three,
-    marginBottom: Spacing.three,
-    gap: Spacing.two,
-  },
-  nfcReaderLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  nfcReaderInput: {
-    minHeight: 42,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.three,
-    fontSize: 14,
-  },
-  nfcReaderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
-    minHeight: 42,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Radius.lg,
-  },
-  nfcReaderButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
   },
   countBadge: {
     paddingVertical: 3,
