@@ -386,6 +386,17 @@ export function EquipTrackProvider({ children }) {
   const applyAppearanceConfig = async (json) => {
     const parsedAppearance = parseAppearanceConfig(json);
     await appearanceLoadPromiseRef.current;
+    if (parsedAppearance.reset) {
+      await AsyncStorage.removeItem(APPEARANCE_STORAGE_KEY);
+      const defaultAppearance = {
+        theme: {},
+        layout: { actions: 'stacked', order: 'call-first' },
+        text: {},
+      };
+      appearanceRef.current = defaultAppearance;
+      setAppearance(defaultAppearance);
+      return true;
+    }
     const nextAppearance = {
       theme: { ...appearanceRef.current.theme, ...parsedAppearance.theme },
       layout: { ...appearanceRef.current.layout, ...parsedAppearance.layout },
@@ -397,6 +408,7 @@ export function EquipTrackProvider({ children }) {
     );
     appearanceRef.current = nextAppearance;
     setAppearance(nextAppearance);
+    return false;
   };
 
   const clearScanHistory = () => {

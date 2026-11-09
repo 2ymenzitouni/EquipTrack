@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "theme": {
+    "backgroundColor": "#FFF1F2",
+    "callButton": "#BE123C",
+    "primary": "#7C2D12",
+    "primaryContainer": "#C2410C",
+    "card": "#FFFBEB",
+    "onSurface": "#292524",
+    "onSurfaceVariant": "#57534E"
+  },
+  "layout": {
+    "actions": "inline",
+    "order": "scan-first"
+  },
+  "text": {
+    "Appeler": "Contacter",
+    "Scan QR": "Vérifier le code",
+    "Répertoire": "Annuaire",
+    "Paramètres de l’application": "Réglages"
+  }
+}

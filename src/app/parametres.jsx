@@ -40,8 +40,12 @@ export default function ParametresScreen() {
     triggerHapticFeedback();
     setIsCheckingUpdate(true);
     try {
-      await applyAppearanceConfig(qrCode);
-      showToast('Configuration visuelle mise à jour.');
+      const wasReset = await applyAppearanceConfig(qrCode);
+      showToast(
+        wasReset
+          ? 'Configuration visuelle réinitialisée.'
+          : 'Configuration visuelle mise à jour.'
+      );
       triggerHapticFeedback();
     } catch (error) {
       console.error('Erreur lors de l’application de la configuration QR :', error);

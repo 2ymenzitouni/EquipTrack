@@ -8,7 +8,7 @@ const COLOR_KEYS = new Set([
   'onSurface',
   'onSurfaceVariant',
 ]);
-const ROOT_KEYS = new Set(['version', 'theme', 'layout', 'text']);
+const ROOT_KEYS = new Set(['version', 'reset', 'theme', 'layout', 'text']);
 
 export function parseAppearanceConfig(json) {
   if (typeof json !== 'string' || json.length > 16000) {
@@ -30,6 +30,15 @@ export function parseAppearanceConfig(json) {
   }
   if (config.version !== 1) {
     throw new Error('La version de configuration doit être 1.');
+  }
+  if (config.reset !== undefined && config.reset !== true) {
+    throw new Error('« reset » doit être true pour réinitialiser la configuration.');
+  }
+  if (config.reset === true) {
+    if (Object.keys(config).some((key) => !['version', 'reset'].includes(key))) {
+      throw new Error('Une configuration de réinitialisation ne peut pas contenir d’autres options.');
+    }
+    return { reset: true, theme: {}, layout: {}, text: {} };
   }
 
   const theme = {};
@@ -99,5 +108,5 @@ export function parseAppearanceConfig(json) {
     throw new Error('La configuration ne contient aucune couleur ou disposition.');
   }
 
-  return { theme, layout, text };
+  return { reset: false, theme, layout, text };
 }

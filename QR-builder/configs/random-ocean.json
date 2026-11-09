@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "theme": {
+    "backgroundColor": "#E0F2FE",
+    "callButton": "#C026D3",
+    "primary": "#0F766E",
+    "primaryContainer": "#0E7490",
+    "card": "#F0FDFA",
+    "onSurface": "#164E63",
+    "onSurfaceVariant": "#475569"
+  },
+  "layout": {
+    "actions": "stacked",
+    "order": "call-first"
+  },
+  "text": {
+    "Appeler": "Joindre",
+    "Scan QR": "Lire le QR",
+    "Répertoire": "Liste des étudiants",
+    "Paramètres de l’application": "Préférences"
+  }
+}
