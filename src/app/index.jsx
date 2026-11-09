@@ -199,7 +199,13 @@ export default function RepertoireScreen() {
       data.trim().toLowerCase() === scanningStudent.tagId.trim().toLowerCase();
     setScanningStudent(null);
     if (matches) {
-      showToast(`QR vérifié : ${scanningStudent.fullName}.`);
+      setStudents((current) =>
+        current.filter((student) => student.id !== scanningStudent.id)
+      );
+      showToast(
+        `QR vérifié : ${scanningStudent.fullName} retiré du répertoire.`,
+        'success'
+      );
       triggerHapticFeedback();
     } else {
       showToast(`Ce QR ne correspond pas au tag de ${scanningStudent.fullName}.`);

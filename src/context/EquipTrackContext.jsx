@@ -213,8 +213,8 @@ export function EquipTrackProvider({ children }) {
     return notifications.filter((n) => !n.read).length;
   }, [notifications]);
 
-  const showToast = useCallback((msg) => {
-    setToastMessage(msg);
+  const showToast = useCallback((msg, variant = 'default') => {
+    setToastMessage({ message: msg, variant });
   }, []);
   const translateText = useCallback(
     (value) =>

@@ -9,19 +9,38 @@ export function Toast() {
   const { toastMessage, colors } = useEquipTrack();
 
   if (!toastMessage) return null;
+  const message =
+    typeof toastMessage === 'string' ? toastMessage : toastMessage.message;
+  const isSuccess =
+    typeof toastMessage === 'object' && toastMessage.variant === 'success';
 
   return (
     <View style={styles.toastContainer} pointerEvents="none">
       <View
         style={[
           styles.toastBox,
+          isSuccess && styles.successToastBox,
           {
-            backgroundColor: colors.surfaceContainerLowest === '#ffffff' ? '#1e293b' : '#334155',
-            borderColor: colors.outlineVariant,
+            backgroundColor: isSuccess
+              ? colors.successContainer
+              : colors.surfaceContainerLowest === '#ffffff'
+              ? '#1e293b'
+              : '#334155',
+            borderColor: isSuccess ? colors.successBorder : colors.outlineVariant,
           },
         ]}>
-        <Ionicons name="checkmark-circle" size={18} color="#89ceff" />
-        <Text style={styles.toastText}>{toastMessage}</Text>
+        <Ionicons
+          name="checkmark-circle"
+          size={18}
+          color={isSuccess ? colors.success : '#89ceff'}
+        />
+        <Text
+          style={[
+            styles.toastText,
+            isSuccess && { color: colors.successText },
+          ]}>
+          {message}
+        </Text>
       </View>
     </View>
   );
@@ -56,5 +75,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  successToastBox: {
+    borderWidth: 1.5,
   },
 });
