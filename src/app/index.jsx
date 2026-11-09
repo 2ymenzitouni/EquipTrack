@@ -59,6 +59,7 @@ export default function RepertoireScreen() {
     updateStudentStatus,
     deleteStudent,
     callPhone,
+    sendEmail,
     triggerHapticFeedback,
     showToast,
   } = useEquipTrack();
@@ -445,11 +446,41 @@ export default function RepertoireScreen() {
                     </Text>
                   </TouchableOpacity>
                 ),
+                email: (
+                  <TouchableOpacity
+                    key="email"
+                    style={[
+                      styles.emailButton,
+                      appearance.layout.actions === 'inline' &&
+                        styles.inlineFullWidthAction,
+                      {
+                        backgroundColor: colors.surfaceContainerLow,
+                        borderColor: colors.surfaceContainerHighest,
+                      },
+                      !student.email && styles.disabledAction,
+                    ]}
+                    onPress={() => sendEmail(student.email)}
+                    disabled={!student.email}
+                    activeOpacity={0.85}
+                    accessibilityLabel={`Envoyer un e-mail à ${student.fullName}`}>
+                    <MaterialIcons
+                      name="email"
+                      size={17}
+                      color={colors.primary}
+                    />
+                    <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
+                      Envoyer un e-mail
+                    </Text>
+                  </TouchableOpacity>
+                ),
               };
               const actionOrder =
                 appearance.layout.order === 'scan-first'
                   ? ['scanQr', 'call']
                   : ['call', 'scanQr'];
+              const orderedActions = actionOrder.flatMap((action) =>
+                action === 'call' ? ['call', 'email'] : [action]
+              );
 
               return (
                 <View
@@ -572,7 +603,23 @@ export default function RepertoireScreen() {
                         styles.cardFooterInline,
                     ]}>
                     <View style={styles.footerLeft}>
-                      <View style={styles.phoneRow}>
+                        {student.email ? (
+                          <View style={styles.emailContactRow}>
+                            <MaterialIcons
+                              name="email"
+                              size={15}
+                              color={colors.outline}
+                            />
+                            <Text
+                              style={[
+                                styles.phoneText,
+                                { color: colors.onSurfaceVariant },
+                              ]}>
+                              {student.email}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <View style={styles.phoneRow}>
                         <MaterialIcons
                           name="call"
                           size={15}
@@ -616,7 +663,7 @@ export default function RepertoireScreen() {
                         appearance.layout.actions === 'inline' &&
                           styles.cardActionsInline,
                       ]}>
-                      {actionOrder.map((action) => actionButtons[action])}
+                      {orderedActions.map((action) => actionButtons[action])}
                     </View>
                   </View>
                 </View>
@@ -961,6 +1008,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  emailContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   phoneText: {
     fontSize: 12,
     fontWeight: '500',
@@ -1004,6 +1056,7 @@ const styles = StyleSheet.create({
   },
   cardActionsInline: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   cardFooterInline: {
     flexDirection: 'column',
@@ -1012,6 +1065,19 @@ const styles = StyleSheet.create({
   },
   inlineActionButton: {
     flex: 1,
+  },
+  inlineFullWidthAction: {
+    flexBasis: '100%',
+  },
+  emailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
   },
   scanQrButton: {
     flexDirection: 'row',

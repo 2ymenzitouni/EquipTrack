@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useColorScheme, Platform, Linking, Alert } from 'react-native';
+import * as ExpoLinking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/theme';
@@ -452,6 +453,33 @@ export function EquipTrackProvider({ children }) {
       });
   };
 
+  const sendEmail = async (email) => {
+    triggerHapticFeedback();
+    const cleanEmail = email.trim();
+    const validEmail =
+      /^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)+$/i.test(
+        cleanEmail
+      );
+
+    if (!validEmail) {
+      Alert.alert(
+        translateText('Adresse e-mail invalide'),
+        translateText('Aucune adresse e-mail valide n’est enregistrée pour cet élève.')
+      );
+      return;
+    }
+
+    try {
+      await ExpoLinking.openURL(`mailto:${encodeURIComponent(cleanEmail)}`);
+    } catch (error) {
+      console.error('Erreur lors de l’ouverture du client e-mail :', error);
+      Alert.alert(
+        translateText('E-mail non disponible'),
+        translateText('Impossible d’ouvrir une application de messagerie.')
+      );
+    }
+  };
+
   return (
     <EquipTrackContext.Provider
       value={{
@@ -479,6 +507,7 @@ export function EquipTrackProvider({ children }) {
         resetToDefaults,
         markNotificationsRead,
         callPhone,
+        sendEmail,
       }}>
       {children}
     </EquipTrackContext.Provider>
