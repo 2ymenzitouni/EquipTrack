@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View,
-  Text,
   TouchableOpacity,
   StyleSheet,
   Modal,
   ScrollView,
   Pressable,
 } from 'react-native';
+import { AppText as Text } from '@/components/ConfigurableText';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useEquipTrack } from '@/context/EquipTrackContext';

@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   Pressable,
   Platform,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useEquipTrack } from '@/context/EquipTrackContext';

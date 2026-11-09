@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useColorScheme, Platform, Linking, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/theme';
+import { parseAppearanceConfig } from '@/utils/appearanceConfig';
+
+const APPEARANCE_STORAGE_KEY = '@equiptrack/appearance';
 
 const INITIAL_STUDENTS = [
   {
@@ -176,6 +180,13 @@ export function EquipTrackProvider({ children }) {
   const [scans, setScans] = useState(INITIAL_SCANS);
   const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
   const [toastMessage, setToastMessage] = useState(null);
+  const [appearance, setAppearance] = useState({
+    theme: {},
+    layout: { actions: 'stacked', order: 'call-first' },
+    text: {},
+  });
+  const appearanceRef = useRef(appearance);
+  const appearanceLoadPromiseRef = useRef(Promise.resolve());
 
   const [settings, setSettings] = useState({
     themeSetting: 'light',
@@ -194,8 +205,8 @@ export function EquipTrackProvider({ children }) {
   }, [themeSetting, systemScheme]);
 
   const colors = useMemo(() => {
-    return Colors[activeTheme];
-  }, [activeTheme]);
+    return { ...Colors[activeTheme], ...appearance.theme };
+  }, [activeTheme, appearance.theme]);
 
   const unreadNotificationCount = useMemo(() => {
     return notifications.filter((n) => !n.read).length;
@@ -204,6 +215,39 @@ export function EquipTrackProvider({ children }) {
   const showToast = useCallback((msg) => {
     setToastMessage(msg);
   }, []);
+  const translateText = useCallback(
+    (value) =>
+      typeof value === 'string' ? appearance.text?.[value] ?? value : value,
+    [appearance.text]
+  );
+
+  useEffect(() => {
+    let isActive = true;
+    appearanceLoadPromiseRef.current = AsyncStorage.getItem(APPEARANCE_STORAGE_KEY)
+      .then((storedConfig) => {
+        if (!storedConfig || !isActive) return;
+        const restoredAppearance = parseAppearanceConfig(storedConfig);
+        if (isActive) {
+          const nextAppearance = {
+            theme: { ...appearanceRef.current.theme, ...restoredAppearance.theme },
+            layout: { ...appearanceRef.current.layout, ...restoredAppearance.layout },
+            text: { ...appearanceRef.current.text, ...restoredAppearance.text },
+          };
+          appearanceRef.current = nextAppearance;
+          setAppearance(nextAppearance);
+        }
+      })
+      .catch((error) => {
+        console.error('Erreur lors du chargement de la configuration visuelle :', error);
+        if (isActive) {
+          showToast('Impossible de charger la configuration visuelle enregistrée.');
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [showToast]);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -339,6 +383,22 @@ export function EquipTrackProvider({ children }) {
     });
   };
 
+  const applyAppearanceConfig = async (json) => {
+    const parsedAppearance = parseAppearanceConfig(json);
+    await appearanceLoadPromiseRef.current;
+    const nextAppearance = {
+      theme: { ...appearanceRef.current.theme, ...parsedAppearance.theme },
+      layout: { ...appearanceRef.current.layout, ...parsedAppearance.layout },
+      text: { ...appearanceRef.current.text, ...parsedAppearance.text },
+    };
+    await AsyncStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({ version: 1, ...nextAppearance })
+    );
+    appearanceRef.current = nextAppearance;
+    setAppearance(nextAppearance);
+  };
+
   const clearScanHistory = () => {
     triggerHapticFeedback();
     setScans([]);
@@ -366,11 +426,17 @@ export function EquipTrackProvider({ children }) {
         if (supported) {
           Linking.openURL(url);
         } else {
-          Alert.alert('Appel non disponible', `Impossible d'appeler le numéro : ${phone}`);
+          Alert.alert(
+            translateText('Appel non disponible'),
+            translateText(`Impossible d'appeler le numéro : ${phone}`)
+          );
         }
       })
       .catch(() => {
-        Alert.alert('Appel non disponible', `Impossible d'appeler le numéro : ${phone}`);
+        Alert.alert(
+          translateText('Appel non disponible'),
+          translateText(`Impossible d'appeler le numéro : ${phone}`)
+        );
       });
   };
 
@@ -380,6 +446,9 @@ export function EquipTrackProvider({ children }) {
         theme: activeTheme,
         themeSetting,
         colors,
+        appearance,
+        translateText,
+        applyAppearanceConfig,
         students,
         scans,
         notifications,

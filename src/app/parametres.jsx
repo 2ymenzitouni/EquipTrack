@@ -1,8 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEquipTrack } from '@/context/EquipTrackContext';
@@ -19,6 +18,8 @@ import { Spacing, Radius } from '@/constants/theme';
 export default function ParametresScreen() {
   const {
     colors,
+    applyAppearanceConfig,
+    translateText,
     themeSetting,
     settings,
     setThemeSetting,
@@ -35,13 +36,19 @@ export default function ParametresScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const hasScannedRef = useRef(false);
 
-  const handleCheckUpdate = () => {
+  const handleCheckUpdate = async () => {
     triggerHapticFeedback();
     setIsCheckingUpdate(true);
-    setTimeout(() => {
+    try {
+      await applyAppearanceConfig(qrCode);
+      showToast('Configuration visuelle mise à jour.');
+      triggerHapticFeedback();
+    } catch (error) {
+      console.error('Erreur lors de l’application de la configuration QR :', error);
+      showToast(error.message || 'Impossible d’appliquer cette configuration.');
+    } finally {
       setIsCheckingUpdate(false);
-      showToast('Votre application est à jour (v2.4.1 Build 890).');
-    }, 900);
+    }
   };
 
   const handleOpenQrScanner = async () => {
@@ -78,12 +85,12 @@ export default function ParametresScreen() {
 
   const handleClearHistory = () => {
     Alert.alert(
-      'Vider l’historique',
-      'Êtes-vous sûr de vouloir supprimer tous les scans enregistrés ?',
+      translateText('Vider l’historique'),
+      translateText('Êtes-vous sûr de vouloir supprimer tous les scans enregistrés ?'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: translateText('Annuler'), style: 'cancel' },
         {
-          text: 'Vider',
+          text: translateText('Vider'),
           style: 'destructive',
           onPress: clearScanHistory,
         },
@@ -93,12 +100,12 @@ export default function ParametresScreen() {
 
   const handleResetData = () => {
     Alert.alert(
-      'Réinitialiser les données',
-      'Rétablir les élèves et scans par défaut de la démonstration ?',
+      translateText('Réinitialiser les données'),
+      translateText('Rétablir les élèves et scans par défaut de la démonstration ?'),
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: translateText('Annuler'), style: 'cancel' },
         {
-          text: 'Réinitialiser',
+          text: translateText('Réinitialiser'),
           onPress: resetToDefaults,
         },
       ]
@@ -470,12 +477,25 @@ export default function ParametresScreen() {
           ]}
           value={qrCode}
           onChangeText={setQrCode}
-          placeholder="Le code lu depuis le QR apparaîtra ici"
+          placeholder={'{"version":1,"layout":{"actions":"inline","order":"scan-first"},"text":{"Appeler":"Contacter","Scan QR":"Vérifier le code"}}'}
           placeholderTextColor={colors.outline}
           multiline
+          autoCapitalize="none"
+          autoCorrect={false}
           textAlignVertical="top"
           accessibilityLabel="Code lu depuis le QR"
         />
+        <Text
+          style={[
+            styles.qrConfigHelp,
+            { color: colors.onSurfaceVariant },
+          ]}>
+          Couleurs acceptées : backgroundColor, callButton, primary,
+          primaryContainer, card, onSurface, onSurfaceVariant. Disposition des
+          boutons du répertoire : stacked ou inline; leur ordre : call-first ou
+          scan-first. Dans « text », chaque clé doit correspondre exactement
+          au texte affiché à remplacer.
+        </Text>
 
         <TouchableOpacity
           style={[
@@ -975,6 +995,11 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     marginTop: Spacing.three,
     fontSize: 14,
+  },
+  qrConfigHelp: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: Spacing.one,
   },
   scanQrButton: {
     flexDirection: 'row',

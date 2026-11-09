@@ -1,8 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -11,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -56,6 +55,7 @@ export default function RepertoireScreen() {
   const router = useRouter();
   const {
     colors,
+    appearance,
     updateStudentStatus,
     deleteStudent,
     callPhone,
@@ -400,6 +400,57 @@ export default function RepertoireScreen() {
           ) : (
             filteredStudents.map((student) => {
               const statusColor = getStatusColor(student.status);
+              const actionButtons = {
+                call: (
+                  <TouchableOpacity
+                    key="call"
+                    style={[
+                      styles.callButton,
+                      appearance.layout.actions === 'inline' &&
+                        styles.inlineActionButton,
+                      {
+                        backgroundColor:
+                          appearance.theme.callButton || colors.primaryContainer,
+                      },
+                    ]}
+                    onPress={() => callPhone(student.phone)}
+                    activeOpacity={0.85}>
+                    <MaterialIcons name="phone" size={17} color="#ffffff" />
+                    <Text style={styles.callButtonText}>Appeler</Text>
+                  </TouchableOpacity>
+                ),
+                scanQr: (
+                  <TouchableOpacity
+                    key="scanQr"
+                    style={[
+                      styles.scanQrButton,
+                      appearance.layout.actions === 'inline' &&
+                        styles.inlineActionButton,
+                      {
+                        backgroundColor: colors.surfaceContainerLow,
+                        borderColor: colors.surfaceContainerHighest,
+                      },
+                      !student.tagId && styles.disabledAction,
+                    ]}
+                    onPress={() => handleScanQr(student)}
+                    disabled={!student.tagId}
+                    activeOpacity={0.85}>
+                    <MaterialIcons
+                      name="qr-code-scanner"
+                      size={17}
+                      color={colors.primary}
+                    />
+                    <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
+                      Scan QR
+                    </Text>
+                  </TouchableOpacity>
+                ),
+              };
+              const actionOrder =
+                appearance.layout.order === 'scan-first'
+                  ? ['scanQr', 'call']
+                  : ['call', 'scanQr'];
+
               return (
                 <View
                   key={student.id}
@@ -517,6 +568,8 @@ export default function RepertoireScreen() {
                     style={[
                       styles.cardFooter,
                       { borderTopColor: colors.surfaceContainer },
+                      appearance.layout.actions === 'inline' &&
+                        styles.cardFooterInline,
                     ]}>
                     <View style={styles.footerLeft}>
                       <View style={styles.phoneRow}>
@@ -557,38 +610,13 @@ export default function RepertoireScreen() {
                       </View>
                     </View>
 
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity
-                        style={[
-                          styles.callButton,
-                          { backgroundColor: colors.primaryContainer },
-                        ]}
-                        onPress={() => callPhone(student.phone)}
-                        activeOpacity={0.85}>
-                        <MaterialIcons name="phone" size={17} color="#ffffff" />
-                        <Text style={styles.callButtonText}>Appeler</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.scanQrButton,
-                          {
-                            backgroundColor: colors.surfaceContainerLow,
-                            borderColor: colors.surfaceContainerHighest,
-                          },
-                          !student.tagId && styles.disabledAction,
-                        ]}
-                        onPress={() => handleScanQr(student)}
-                        disabled={!student.tagId}
-                        activeOpacity={0.85}>
-                        <MaterialIcons
-                          name="qr-code-scanner"
-                          size={17}
-                          color={colors.primary}
-                        />
-                        <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
-                          Scan QR
-                        </Text>
-                      </TouchableOpacity>
+                    <View
+                      style={[
+                        styles.cardActions,
+                        appearance.layout.actions === 'inline' &&
+                          styles.cardActionsInline,
+                      ]}>
+                      {actionOrder.map((action) => actionButtons[action])}
                     </View>
                   </View>
                 </View>
@@ -973,6 +1001,17 @@ const styles = StyleSheet.create({
   cardActions: {
     alignItems: 'stretch',
     gap: Spacing.two,
+  },
+  cardActionsInline: {
+    flexDirection: 'row',
+  },
+  cardFooterInline: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: Spacing.two,
+  },
+  inlineActionButton: {
+    flex: 1,
   },
   scanQrButton: {
     flexDirection: 'row',
