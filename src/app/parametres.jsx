@@ -7,10 +7,11 @@ import {
   Switch,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { MaterialIcons } from '@expo/vector-icons';
-import { readNdefText } from '@/utils/nfcScanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEquipTrack } from '@/context/EquipTrackContext';
 import { Spacing, Radius } from '@/constants/theme';
 
@@ -30,8 +31,9 @@ export default function ParametresScreen() {
   } = useEquipTrack();
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [appearanceConfig, setAppearanceConfig] = useState('');
-  const [isNfcScanning, setIsNfcScanning] = useState(false);
-  const nfcScanRef = useRef(false);
+  const [isQrScannerVisible, setIsQrScannerVisible] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const hasScannedQrRef = useRef(false);
 
   const handleCheckUpdate = async () => {
     triggerHapticFeedback();
@@ -52,32 +54,38 @@ export default function ParametresScreen() {
     }
   };
 
-  const handleScanNdefTag = async () => {
-    if (nfcScanRef.current) return;
-    nfcScanRef.current = true;
-    setIsNfcScanning(true);
+  const handleOpenQrScanner = async () => {
     triggerHapticFeedback();
-
     try {
-      const config = await readNdefText();
-      setAppearanceConfig(config);
-      showToast('Configuration NDEF lue et ajoutée au champ.');
-      triggerHapticFeedback();
-    } catch (error) {
-      console.error('Erreur lors de la lecture de la configuration NDEF :', error);
-      if (error?.message === 'NFC_UNSUPPORTED') {
-        showToast('Ce téléphone ne prend pas en charge la lecture NFC.');
-      } else if (error?.message === 'NFC_NATIVE_APP_REQUIRED') {
-        showToast('La lecture NFC nécessite l’application iOS ou Android.');
-      } else if (error?.message === 'NFC_NDEF_TEXT_UNAVAILABLE') {
-        showToast('Le tag détecté ne contient aucun enregistrement NDEF texte.');
-      } else {
-        showToast('Lecture NFC annulée ou impossible. Réessayez avec un tag NDEF.');
+      const permission = cameraPermission?.granted
+        ? cameraPermission
+        : await requestCameraPermission();
+      if (!permission.granted) {
+        showToast('Autorisez l’accès à la caméra pour scanner le code QR.');
+        return;
       }
-    } finally {
-      nfcScanRef.current = false;
-      setIsNfcScanning(false);
+
+      hasScannedQrRef.current = false;
+      setIsQrScannerVisible(true);
+    } catch (error) {
+      console.error('Erreur lors de la demande d’accès à la caméra :', error);
+      showToast('Impossible d’accéder à la caméra.');
     }
+  };
+
+  const handleQrScanned = ({ data }) => {
+    if (hasScannedQrRef.current) return;
+    const qrValue = data.trim();
+    if (!qrValue) {
+      showToast('Le code QR ne contient aucune configuration.');
+      return;
+    }
+
+    hasScannedQrRef.current = true;
+    setAppearanceConfig(qrValue);
+    setIsQrScannerVisible(false);
+    triggerHapticFeedback();
+    showToast('Code QR lu et ajouté au champ.');
   };
 
   const handleClearHistory = () => {
@@ -480,15 +488,15 @@ export default function ParametresScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           textAlignVertical="top"
-          accessibilityLabel="Configuration visuelle NDEF"
+          accessibilityLabel="Configuration visuelle lue depuis un code QR"
         />
         <Text
           style={[
             styles.configHelp,
             { color: colors.onSurfaceVariant },
           ]}>
-          Le tag NFC doit contenir la configuration JSON dans un enregistrement
-          NDEF texte. Couleurs acceptées : backgroundColor, callButton, primary,
+          Le code QR doit contenir la configuration JSON. Couleurs acceptées :
+          backgroundColor, callButton, primary,
           primaryContainer, card, onSurface, onSurfaceVariant. Disposition des
           boutons du répertoire : stacked ou inline; leur ordre : call-first ou
           scan-first. Dans « text », chaque clé doit correspondre exactement
@@ -497,22 +505,17 @@ export default function ParametresScreen() {
 
         <TouchableOpacity
           style={[
-            styles.scanNdefButton,
+            styles.scanQrButton,
             {
               backgroundColor: colors.surfaceContainerLow,
               borderColor: colors.outlineVariant,
             },
           ]}
-          onPress={handleScanNdefTag}
-          disabled={isNfcScanning}
+          onPress={handleOpenQrScanner}
           activeOpacity={0.85}>
-          {isNfcScanning ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <MaterialIcons name="contactless" size={18} color={colors.primary} />
-          )}
-          <Text style={[styles.scanNdefButtonText, { color: colors.primary }]}>
-            {isNfcScanning ? 'Lecture du tag NFC...' : 'Scanner un tag NFC NDEF'}
+          <MaterialIcons name="qr-code-scanner" size={18} color={colors.primary} />
+          <Text style={[styles.scanQrButtonText, { color: colors.primary }]}>
+            Scanner un code QR
           </Text>
         </TouchableOpacity>
       </View>
@@ -749,6 +752,40 @@ export default function ParametresScreen() {
         </Text>
       </View>
 
+      <Modal
+        visible={isQrScannerVisible}
+        animationType="slide"
+        onRequestClose={() => setIsQrScannerVisible(false)}>
+        <View style={styles.qrScannerModal}>
+          {isQrScannerVisible && (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={handleQrScanned}
+              onMountError={(event) => {
+                console.error('Erreur d’ouverture de la caméra :', event.message);
+                setIsQrScannerVisible(false);
+                showToast('Impossible d’ouvrir la caméra.');
+              }}
+            />
+          )}
+          <View style={styles.qrScannerHeader}>
+            <TouchableOpacity
+              style={styles.qrScannerClose}
+              onPress={() => setIsQrScannerVisible(false)}
+              accessibilityLabel="Fermer le scanner QR">
+              <MaterialIcons name="close" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.qrScannerTitle}>Scanner un code QR</Text>
+            <Text style={styles.qrScannerSubtitle}>
+              La configuration lue sera ajoutée au champ
+            </Text>
+          </View>
+          <View style={styles.qrScannerFrame} pointerEvents="none" />
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
@@ -971,7 +1008,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: Spacing.one,
   },
-  scanNdefButton: {
+  scanQrButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -981,9 +1018,46 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: Spacing.two,
   },
-  scanNdefButtonText: {
+  scanQrButtonText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  qrScannerModal: {
+    flex: 1,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrScannerHeader: {
+    position: 'absolute',
+    top: 56,
+    left: Spacing.four,
+    right: Spacing.four,
+    alignItems: 'center',
+  },
+  qrScannerClose: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    padding: Spacing.two,
+  },
+  qrScannerTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  qrScannerSubtitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginTop: Spacing.one,
+  },
+  qrScannerFrame: {
+    width: '72%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderRadius: Radius.xl,
   },
   settingToggleRow: {
     flexDirection: 'row',

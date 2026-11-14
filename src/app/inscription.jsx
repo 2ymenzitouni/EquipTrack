@@ -6,11 +6,12 @@ import {
   StyleSheet,
   Animated,
   Platform,
+  Modal,
 } from 'react-native';
 import { AppText as Text, AppTextInput as TextInput } from '@/components/ConfigurableText';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { readNfcTagId } from '@/utils/nfcScanner';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Crypto from 'expo-crypto';
 import * as Clipboard from 'expo-clipboard';
 import { useEquipTrack } from '@/context/EquipTrackContext';
@@ -111,14 +112,15 @@ export default function InscriptionScreen() {
   const [engineeringOption, setEngineeringOption] = useState('');
   const [phone, setPhone] = useState('');
   const [scannedTagId, setScannedTagId] = useState('');
-  const [isScanningNfc, setIsScanningNfc] = useState(false);
+  const [isQrScannerVisible, setIsQrScannerVisible] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [isSaving, setIsSaving] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
   const [specializationModalOpen, setSpecializationModalOpen] = useState(false);
   const [engineeringYearModalOpen, setEngineeringYearModalOpen] = useState(false);
   const [engineeringOptionModalOpen, setEngineeringOptionModalOpen] = useState(false);
-  const nfcScanRef = useRef(false);
+  const hasScannedQrRef = useRef(false);
   const availableSpecializations = LICENCE_SPECIALIZATIONS[sectionYear] || [];
   const selectedYearLabel = LICENCE_YEARS.find(
     ({ year }) => year === sectionYear
@@ -173,32 +175,38 @@ export default function InscriptionScreen() {
     return () => pulseLoop.stop();
   }, [pulseAnim]);
 
-  const handleScanTag = async () => {
-    if (nfcScanRef.current) return;
-    nfcScanRef.current = true;
-    setIsScanningNfc(true);
+  const handleOpenQrScanner = async () => {
     triggerHapticFeedback();
-
     try {
-      const tagId = await readNfcTagId();
-      setScannedTagId(tagId);
-      showToast('Tag NFC scanné avec succès.');
-      triggerHapticFeedback();
-    } catch (error) {
-      console.error('Erreur lors de la lecture du tag NFC :', error);
-      if (error?.message === 'NFC_UNSUPPORTED') {
-        showToast('Ce téléphone ne prend pas en charge la lecture NFC.');
-      } else if (error?.message === 'NFC_NATIVE_APP_REQUIRED') {
-        showToast('La lecture NFC nécessite l’application iOS ou Android.');
-      } else if (error?.message === 'NFC_TAG_ID_UNAVAILABLE') {
-        showToast('Le tag détecté ne fournit pas d’identifiant lisible.');
-      } else {
-        showToast('Lecture NFC annulée ou impossible. Réessayez avec un tag compatible.');
+      const permission = cameraPermission?.granted
+        ? cameraPermission
+        : await requestCameraPermission();
+      if (!permission.granted) {
+        showToast('Autorisez l’accès à la caméra pour scanner le code QR.');
+        return;
       }
-    } finally {
-      nfcScanRef.current = false;
-      setIsScanningNfc(false);
+
+      hasScannedQrRef.current = false;
+      setIsQrScannerVisible(true);
+    } catch (error) {
+      console.error('Erreur lors de la demande d’accès à la caméra :', error);
+      showToast('Impossible d’accéder à la caméra.');
     }
+  };
+
+  const handleQrScanned = ({ data }) => {
+    if (hasScannedQrRef.current) return;
+    const qrValue = data.trim();
+    if (!qrValue) {
+      showToast('Le code QR ne contient aucun identifiant.');
+      return;
+    }
+
+    hasScannedQrRef.current = true;
+    setScannedTagId(qrValue);
+    setIsQrScannerVisible(false);
+    triggerHapticFeedback();
+    showToast('Code QR scanné avec succès.');
   };
 
   const handleCopyTag = async () => {
@@ -259,7 +267,7 @@ export default function InscriptionScreen() {
       return;
     }
     if (!scannedTagId) {
-      showToast('Veuillez scanner un tag NFC avant de continuer.');
+      showToast('Veuillez scanner un code QR avant de continuer.');
       return;
     }
 
@@ -980,7 +988,7 @@ export default function InscriptionScreen() {
         </View>
       </View>
 
-      {/* SECTION 2: NFC Tag Scanning Module */}
+      {/* SECTION 2: QR Code Scanning */}
       <View
         style={[
           styles.card,
@@ -991,9 +999,9 @@ export default function InscriptionScreen() {
         ]}>
         <View style={styles.cardHeaderRow}>
           <View style={styles.cardTitleContainer}>
-            <MaterialIcons name="nfc" size={20} color={colors.secondary} />
+            <MaterialIcons name="qr-code-scanner" size={20} color={colors.secondary} />
             <Text style={[styles.cardTitle, { color: colors.onSurface }]}>
-              Scanner un tag NFC
+              Scanner un code QR
             </Text>
           </View>
           {/* Green Success Badge */}
@@ -1007,13 +1015,13 @@ export default function InscriptionScreen() {
             ]}>
             <Ionicons name="checkmark-circle" size={14} color={colors.successText} />
             <Text style={[styles.tagStatusText, { color: colors.successText }]}>
-              {isScanningNfc ? 'Lecture en cours' : scannedTagId ? 'Tag détecté' : 'En attente'}
+              {scannedTagId ? 'Code détecté' : 'En attente'}
             </Text>
           </View>
         </View>
 
         <Text style={[styles.sectionDescription, { color: colors.onSurfaceVariant }]}>
-          Approchez un tag NFC du téléphone pour remplir automatiquement son identifiant.
+          Scannez le code QR pour remplir automatiquement son identifiant.
         </Text>
 
         {/* Radar Scanner Box */}
@@ -1039,20 +1047,16 @@ export default function InscriptionScreen() {
             style={[
               styles.scanButton,
               { backgroundColor: colors.secondary },
-              isScanningNfc && { opacity: 0.8 },
             ]}
-            onPress={handleScanTag}
-            disabled={isScanningNfc}
+            onPress={handleOpenQrScanner}
             activeOpacity={0.85}
           >
             <MaterialIcons
-              name="nfc"
+              name="qr-code-scanner"
               size={22}
               color="#ffffff"
             />
-            <Text style={styles.scanButtonText}>
-              {isScanningNfc ? 'Lecture en cours...' : 'Scanner le tag NFC'}
-            </Text>
+            <Text style={styles.scanButtonText}>Scanner un code QR</Text>
           </TouchableOpacity>
 
           <View style={styles.radarStatusRow}>
@@ -1060,9 +1064,7 @@ export default function InscriptionScreen() {
               style={[styles.pingDot, { backgroundColor: colors.success }]}
             />
             <Text style={[styles.radarStatusText, { color: colors.onSurfaceVariant }]}>
-              {isScanningNfc
-                ? 'Approchez le tag NFC du téléphone'
-                : 'Prêt à lire un tag NFC'}
+              Prêt à scanner un code QR
             </Text>
           </View>
         </View>
@@ -1071,10 +1073,10 @@ export default function InscriptionScreen() {
         <View style={styles.tagIdSection}>
           <View style={styles.tagIdHeader}>
             <Text style={[styles.inputLabel, { color: colors.onSurfaceVariant }]}>
-              Identifiant du tag scanné
+              Identifiant QR scanné
             </Text>
             <Text style={[styles.tagFrequencyLabel, { color: colors.primary }]}>
-              Identifiant NFC
+              Code QR
             </Text>
           </View>
 
@@ -1087,7 +1089,7 @@ export default function InscriptionScreen() {
               },
             ]}>
             <MaterialIcons
-              name="nfc"
+              name="qr-code-2"
               size={22}
               color={colors.primary}
               style={styles.tagIdIcon}
@@ -1096,7 +1098,7 @@ export default function InscriptionScreen() {
               style={[styles.tagIdText, { color: colors.onSurface }]}
               value={scannedTagId}
               onChangeText={setScannedTagId}
-              placeholder="Saisir ou scanner l’identifiant NFC"
+              placeholder="Saisir ou scanner l’identifiant QR"
               placeholderTextColor={colors.outline}
               autoCapitalize="none"
             />
@@ -1119,7 +1121,7 @@ export default function InscriptionScreen() {
             <MaterialIcons name="lock" size={14} color={colors.outline} />
             <Text
               style={[styles.securityFootnoteText, { color: colors.onSurfaceVariant }]}>
-              L’identifiant contenu dans le tag NFC sera associé à cette inscription.
+              L’identifiant contenu dans le code QR sera associé à cette inscription.
             </Text>
           </View>
         </View>
@@ -1142,6 +1144,39 @@ export default function InscriptionScreen() {
           {isSaving ? 'Enregistrement...' : 'Enregistrer l’utilisateur'}
         </Text>
       </TouchableOpacity>
+    <Modal
+      visible={isQrScannerVisible}
+      animationType="slide"
+      onRequestClose={() => setIsQrScannerVisible(false)}>
+      <View style={styles.qrScannerModal}>
+        {isQrScannerVisible && (
+          <CameraView
+            style={StyleSheet.absoluteFill}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={handleQrScanned}
+            onMountError={(event) => {
+              console.error('Erreur d’ouverture de la caméra :', event.message);
+              setIsQrScannerVisible(false);
+              showToast('Impossible d’ouvrir la caméra.');
+            }}
+          />
+        )}
+        <View style={styles.qrScannerHeader}>
+          <TouchableOpacity
+            style={styles.qrScannerClose}
+            onPress={() => setIsQrScannerVisible(false)}
+            accessibilityLabel="Fermer le scanner QR">
+            <MaterialIcons name="close" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.qrScannerTitle}>Scanner un code QR</Text>
+          <Text style={styles.qrScannerSubtitle}>
+            L’identifiant lu sera ajouté au champ
+          </Text>
+        </View>
+        <View style={styles.qrScannerFrame} pointerEvents="none" />
+      </View>
+    </Modal>
     </ScrollView>
   );
 }
@@ -1392,5 +1427,42 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
+  },
+  qrScannerModal: {
+    flex: 1,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  qrScannerHeader: {
+    position: 'absolute',
+    top: 56,
+    left: Spacing.four,
+    right: Spacing.four,
+    alignItems: 'center',
+  },
+  qrScannerClose: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    padding: Spacing.two,
+  },
+  qrScannerTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  qrScannerSubtitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    marginTop: Spacing.one,
+  },
+  qrScannerFrame: {
+    width: '72%',
+    aspectRatio: 1,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    borderRadius: Radius.xl,
   },
 });

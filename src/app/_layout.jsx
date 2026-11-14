@@ -3,10 +3,10 @@ import { View, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { EquipTrackProvider, useEquipTrack } from '@context/EquipTrackContext';
-import { HeaderBar } from '@components/HeaderBar';
-import { CustomBottomTabBar } from '@components/BottomTabBar';
-import { Toast } from '@components/Toast';
+import { EquipTrackProvider, useEquipTrack } from '@/context/EquipTrackContext';
+import { HeaderBar } from '@/components/HeaderBar';
+import { CustomBottomTabBar } from '@/components/BottomTabBar';
+import { Toast } from '@/components/Toast';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -46,7 +46,12 @@ function RootNavigator() {
         screenOptions={{
           headerShown: false,
         }}
-      />
+      >
+        <Tabs.Screen name="inscription" />
+        <Tabs.Screen name="index" />
+        <Tabs.Screen name="historique" />
+        <Tabs.Screen name="parametres" />
+      </Tabs>
       <Toast />
     </View>
   );
