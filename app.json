@@ -44,7 +44,7 @@
       [
         "react-native-nfc-manager",
         {
-          "nfcPermission": "Autoriser EquipTrack à lire les identifiants des tags NFC."
+          "nfcPermission": "Autoriser EquipTrack à lire les tags NFC et leur contenu NDEF."
         }
       ]
     ],
